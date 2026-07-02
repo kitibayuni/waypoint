@@ -1,6 +1,10 @@
-use axum::{routing::get, Router};
+use axum::routing::{get, post};
+use axum::{middleware, Router};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
+
+use backend::auth;
+use backend::state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -24,9 +28,25 @@ async fn main() {
         .expect("failed to run migrations");
     tracing::info!("migrations applied");
 
-    let app = Router::new()
+    let state = AppState { pool };
+
+    let public_routes = Router::new()
         .route("/healthz", get(healthz))
-        .layer(TraceLayer::new_for_http());
+        .route("/auth/login", post(auth::routes::login));
+
+    let protected_routes = Router::new()
+        .route("/auth/logout", post(auth::routes::logout))
+        .route("/auth/me", get(auth::routes::me))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::middleware::require_auth,
+        ));
+
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
 
     let port = std::env::var("BACKEND_PORT").unwrap_or_else(|_| "8080".into());
     let addr = format!("0.0.0.0:{port}");
