@@ -1,3 +1,4 @@
+pub mod checklists;
 pub mod clients;
 pub mod credential_usage;
 pub mod credentials;
@@ -5,10 +6,12 @@ pub mod engagements;
 pub mod graph;
 pub mod hosts;
 pub mod members;
+pub mod notes;
 pub mod observation_types;
 pub mod observations;
 pub mod scope;
 pub mod services;
+pub mod templates;
 pub mod trust_relationships;
 
 use axum::Router;
@@ -29,4 +32,7 @@ pub fn router() -> Router<AppState> {
         .merge(credential_usage::router())
         .merge(trust_relationships::router())
         .merge(graph::router())
+        .merge(checklists::router())
+        .merge(notes::router())
+        .merge(templates::router())
 }
