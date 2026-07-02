@@ -1,4 +1,5 @@
 use axum::{routing::get, Router};
+use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 
 #[tokio::main]
@@ -9,6 +10,19 @@ async fn main() {
                 .unwrap_or_else(|_| "backend=debug,tower_http=debug".into()),
         )
         .init();
+
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await
+        .expect("failed to connect to database");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("failed to run migrations");
+    tracing::info!("migrations applied");
 
     let app = Router::new()
         .route("/healthz", get(healthz))
