@@ -129,6 +129,7 @@
 		</p>
 		<p><a href={`/engagements/${engagementId}/hosts`}>View hosts &rarr;</a></p>
 		<p><a href={`/engagements/${engagementId}/credentials`}>View credentials &rarr;</a></p>
+		<p><a href={`/engagements/${engagementId}/graph`}>View attack graph &rarr;</a></p>
 
 		{#if error}
 			<p class="error">{error}</p>
