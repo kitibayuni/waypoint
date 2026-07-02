@@ -41,7 +41,11 @@ pub(crate) async fn host_engagement_id(pool: &PgPool, host_id: Uuid) -> Result<U
         .ok_or(StatusCode::NOT_FOUND)
 }
 
-async fn get_or_create_tag(pool: &PgPool, engagement_id: Uuid, name: &str) -> Result<Uuid, sqlx::Error> {
+pub(crate) async fn get_or_create_tag(
+    pool: &PgPool,
+    engagement_id: Uuid,
+    name: &str,
+) -> Result<Uuid, sqlx::Error> {
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO tags (engagement_id, name) VALUES ($1, $2)
          ON CONFLICT (engagement_id, name) DO UPDATE SET name = EXCLUDED.name
