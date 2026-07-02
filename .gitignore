@@ -1,0 +1,19 @@
+# Rust
+/backend/target/
+**/*.rs.bk
+
+# Node / SvelteKit
+/frontend/node_modules/
+/frontend/build/
+/frontend/.svelte-kit/
+/frontend/dist/
+
+# Env / secrets
+.env
+nginx/certs/*.key
+nginx/certs/*.pem
+nginx/certs/*.crt
+
+# OS / editor
+.DS_Store
+*.swp
