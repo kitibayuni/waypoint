@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use axum::routing::{get, post};
 use axum::{middleware, Router};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 
 use backend::auth;
+use backend::crypto::CredentialCipher;
 use backend::state::AppState;
 
 #[tokio::main]
@@ -28,7 +31,10 @@ async fn main() {
         .expect("failed to run migrations");
     tracing::info!("migrations applied");
 
-    let state = AppState { pool };
+    let cred_enc_key = std::env::var("CRED_ENC_KEY").expect("CRED_ENC_KEY must be set");
+    let cred_cipher = Arc::new(CredentialCipher::from_env_key(&cred_enc_key));
+
+    let state = AppState { pool, cred_cipher };
 
     let public_routes = Router::new()
         .route("/healthz", get(healthz))
