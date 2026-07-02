@@ -15,28 +15,34 @@ services:
       retries: 10
 
   backend:
-    image: rust:1.89-slim
-    working_dir: /app
-    command: ["sleep", "infinity"]
+    build:
+      context: ./backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       CRED_ENC_KEY: ${CRED_ENC_KEY}
-    volumes:
-      - ./backend:/app
+      BACKEND_PORT: ${BACKEND_PORT}
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${BACKEND_PORT}/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - "80:80"
+      - "${HTTPS_PORT}:443"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   db_data:
