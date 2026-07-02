@@ -1,4 +1,6 @@
 pub mod clients;
+pub mod credential_usage;
+pub mod credentials;
 pub mod engagements;
 pub mod hosts;
 pub mod members;
@@ -21,4 +23,6 @@ pub fn router() -> Router<AppState> {
         .merge(services::router())
         .merge(observation_types::router())
         .merge(observations::router())
+        .merge(credentials::router())
+        .merge(credential_usage::router())
 }
