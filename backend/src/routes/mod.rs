@@ -2,12 +2,14 @@ pub mod clients;
 pub mod credential_usage;
 pub mod credentials;
 pub mod engagements;
+pub mod graph;
 pub mod hosts;
 pub mod members;
 pub mod observation_types;
 pub mod observations;
 pub mod scope;
 pub mod services;
+pub mod trust_relationships;
 
 use axum::Router;
 
@@ -25,4 +27,6 @@ pub fn router() -> Router<AppState> {
         .merge(observations::router())
         .merge(credentials::router())
         .merge(credential_usage::router())
+        .merge(trust_relationships::router())
+        .merge(graph::router())
 }
