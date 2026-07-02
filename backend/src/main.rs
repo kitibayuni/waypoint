@@ -37,6 +37,7 @@ async fn main() {
     let protected_routes = Router::new()
         .route("/auth/logout", post(auth::routes::logout))
         .route("/auth/me", get(auth::routes::me))
+        .merge(backend::routes::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth::middleware::require_auth,
