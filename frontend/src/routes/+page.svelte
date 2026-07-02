@@ -12,6 +12,7 @@
 	{#if $currentUser}
 		<h1>Engagement Manager</h1>
 		<p>Signed in as {$currentUser.display_name} ({$currentUser.email})</p>
+		<p><a href="/engagements">View engagements &rarr;</a></p>
 		<button onclick={handleLogout}>Sign out</button>
 	{/if}
 </main>
