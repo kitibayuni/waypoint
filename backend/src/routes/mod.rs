@@ -1,7 +1,9 @@
 pub mod clients;
 pub mod engagements;
+pub mod hosts;
 pub mod members;
 pub mod scope;
+pub mod services;
 
 use axum::Router;
 
@@ -13,4 +15,6 @@ pub fn router() -> Router<AppState> {
         .merge(engagements::router())
         .merge(scope::router())
         .merge(members::router())
+        .merge(hosts::router())
+        .merge(services::router())
 }
