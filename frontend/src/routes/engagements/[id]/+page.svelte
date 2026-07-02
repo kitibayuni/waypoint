@@ -127,6 +127,7 @@
 				· {engagement.start_date ?? '?'} &rarr; {engagement.end_date ?? '?'}
 			{/if}
 		</p>
+		<p><a href={`/engagements/${engagementId}/hosts`}>View hosts &rarr;</a></p>
 
 		{#if error}
 			<p class="error">{error}</p>
