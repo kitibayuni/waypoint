@@ -21,6 +21,11 @@
 	} from '$lib/api/observations';
 	import type { ObservationType, Observation } from '$lib/api/observations';
 	import ObservationChip from '$lib/components/ObservationChip.svelte';
+	import { listHostChecklists } from '$lib/api/checklists';
+	import type { Checklist } from '$lib/api/checklists';
+	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
+	import { listHostNotes } from '$lib/api/notes';
+	import type { Note } from '$lib/api/notes';
 
 	const engagementId = $page.params.id as string;
 	const hostId = $page.params.hostId as string;
@@ -29,7 +34,7 @@
 	let services = $state<Service[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state<'general' | 'services' | 'observations'>('general');
+	let activeTab = $state<'general' | 'services' | 'observations' | 'checklists' | 'notes'>('general');
 
 	let labelDraft = $state('');
 	let hostnameDraft = $state('');
@@ -57,20 +62,27 @@
 	let editEvidenceDraft = $state('');
 	let editSeverityDraft = $state('');
 
+	let checklists = $state<Checklist[]>([]);
+	let notes = $state<Note[]>([]);
+
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [h, svc, obsTypes, obs] = await Promise.all([
+			const [h, svc, obsTypes, obs, cls, hostNotes] = await Promise.all([
 				getHost(hostId),
 				listServices(hostId),
 				listObservationTypes(),
-				listObservations(hostId)
+				listObservations(hostId),
+				listHostChecklists(hostId),
+				listHostNotes(hostId)
 			]);
 			host = h;
 			services = svc;
 			observationTypes = obsTypes;
 			observations = obs;
+			checklists = cls;
+			notes = hostNotes;
 			labelDraft = h.label;
 			hostnameDraft = h.hostname ?? '';
 			osDraft = h.os ?? '';
@@ -258,6 +270,12 @@
 			>
 				Observations ({observations.length})
 			</button>
+			<button class:active={activeTab === 'checklists'} onclick={() => (activeTab = 'checklists')}>
+				Checklists ({checklists.length})
+			</button>
+			<button class:active={activeTab === 'notes'} onclick={() => (activeTab = 'notes')}>
+				Notes ({notes.length})
+			</button>
 		</nav>
 
 		{#if activeTab === 'general'}
@@ -366,7 +384,7 @@
 					<button type="submit">Add service</button>
 				</form>
 			</section>
-		{:else}
+		{:else if activeTab === 'observations'}
 			<section>
 				<div class="inline-form">
 					<select bind:value={newObservationTypeId}>
@@ -411,6 +429,34 @@
 						</div>
 					{/each}
 				</div>
+			</section>
+		{:else if activeTab === 'checklists'}
+			<section>
+				{#if checklists.length === 0}
+					<p class="muted">No checklists yet — create this host from a template to get one.</p>
+				{:else}
+					{#each checklists as checklist (checklist.id)}
+						<ChecklistPanel
+							{checklist}
+							onchange={(updated) => {
+								checklists = checklists.map((c) => (c.id === updated.id ? updated : c));
+							}}
+						/>
+					{/each}
+				{/if}
+			</section>
+		{:else}
+			<section>
+				{#if notes.length === 0}
+					<p class="muted">No notes yet.</p>
+				{:else}
+					{#each notes as note (note.id)}
+						<article class="note">
+							{#if note.title}<h3>{note.title}</h3>{/if}
+							<pre>{note.body_md}</pre>
+						</article>
+					{/each}
+				{/if}
 			</section>
 		{/if}
 	{/if}
@@ -523,5 +569,22 @@
 	.observation-edit-actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+	.muted {
+		color: #777;
+	}
+	.note {
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		padding: 0.75rem;
+		margin-bottom: 1rem;
+	}
+	.note h3 {
+		margin-top: 0;
+	}
+	.note pre {
+		white-space: pre-wrap;
+		font-family: inherit;
+		margin: 0;
 	}
 </style>
