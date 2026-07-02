@@ -12,6 +12,15 @@
 	import type { Host } from '$lib/api/hosts';
 	import { listServices, createService, deleteService } from '$lib/api/services';
 	import type { Service } from '$lib/api/services';
+	import {
+		listObservationTypes,
+		listObservations,
+		createObservation,
+		updateObservation,
+		deleteObservation
+	} from '$lib/api/observations';
+	import type { ObservationType, Observation } from '$lib/api/observations';
+	import ObservationChip from '$lib/components/ObservationChip.svelte';
 
 	const engagementId = $page.params.id as string;
 	const hostId = $page.params.hostId as string;
@@ -20,7 +29,7 @@
 	let services = $state<Service[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state<'general' | 'services'>('general');
+	let activeTab = $state<'general' | 'services' | 'observations'>('general');
 
 	let labelDraft = $state('');
 	let hostnameDraft = $state('');
@@ -39,13 +48,29 @@
 	let newProduct = $state('');
 	let newVersion = $state('');
 
+	let observationTypes = $state<ObservationType[]>([]);
+	let observations = $state<Observation[]>([]);
+	let newObservationTypeId = $state('');
+	let newObservationEvidence = $state('');
+	let expandedObservationId = $state<string | null>(null);
+	let editStatusDraft = $state('suspected');
+	let editEvidenceDraft = $state('');
+	let editSeverityDraft = $state('');
+
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [h, svc] = await Promise.all([getHost(hostId), listServices(hostId)]);
+			const [h, svc, obsTypes, obs] = await Promise.all([
+				getHost(hostId),
+				listServices(hostId),
+				listObservationTypes(),
+				listObservations(hostId)
+			]);
 			host = h;
 			services = svc;
+			observationTypes = obsTypes;
+			observations = obs;
 			labelDraft = h.label;
 			hostnameDraft = h.hostname ?? '';
 			osDraft = h.os ?? '';
@@ -153,6 +178,58 @@
 			error = 'Failed to remove service.';
 		}
 	}
+
+	async function handleAttachObservation() {
+		if (!newObservationTypeId) return;
+		try {
+			const observation = await createObservation(hostId, {
+				observation_type_id: newObservationTypeId,
+				evidence_md: newObservationEvidence
+			});
+			observations = [...observations, observation];
+			newObservationTypeId = '';
+			newObservationEvidence = '';
+			error = '';
+		} catch {
+			error = 'Failed to attach observation.';
+		}
+	}
+
+	function toggleExpand(observation: Observation) {
+		if (expandedObservationId === observation.id) {
+			expandedObservationId = null;
+			return;
+		}
+		expandedObservationId = observation.id;
+		editStatusDraft = observation.status;
+		editEvidenceDraft = observation.evidence_md;
+		editSeverityDraft = observation.severity_override ?? '';
+	}
+
+	async function saveObservationEdit(observationId: string) {
+		try {
+			const updated = await updateObservation(observationId, {
+				status: editStatusDraft,
+				evidence_md: editEvidenceDraft,
+				severity_override: editSeverityDraft || null
+			});
+			observations = observations.map((o) => (o.id === observationId ? updated : o));
+			expandedObservationId = null;
+			error = '';
+		} catch {
+			error = 'Failed to update observation.';
+		}
+	}
+
+	async function handleDeleteObservation(observationId: string) {
+		try {
+			await deleteObservation(observationId);
+			observations = observations.filter((o) => o.id !== observationId);
+			expandedObservationId = null;
+		} catch {
+			error = 'Failed to remove observation.';
+		}
+	}
 </script>
 
 <main>
@@ -174,6 +251,12 @@
 			</button>
 			<button class:active={activeTab === 'services'} onclick={() => (activeTab = 'services')}>
 				Services ({services.length})
+			</button>
+			<button
+				class:active={activeTab === 'observations'}
+				onclick={() => (activeTab = 'observations')}
+			>
+				Observations ({observations.length})
 			</button>
 		</nav>
 
@@ -245,7 +328,7 @@
 					<button onclick={handleAddTag}>Add</button>
 				</div>
 			</section>
-		{:else}
+		{:else if activeTab === 'services'}
 			<section>
 				<table>
 					<thead>
@@ -282,6 +365,52 @@
 					<input bind:value={newVersion} placeholder="version" />
 					<button type="submit">Add service</button>
 				</form>
+			</section>
+		{:else}
+			<section>
+				<div class="inline-form">
+					<select bind:value={newObservationTypeId}>
+						<option value="" disabled selected>Select an observation…</option>
+						{#each observationTypes as ot (ot.id)}
+							<option value={ot.id}>[{ot.category}] {ot.title}</option>
+						{/each}
+					</select>
+					<input bind:value={newObservationEvidence} placeholder="Evidence (optional)" />
+					<button onclick={handleAttachObservation}>Attach</button>
+				</div>
+
+				<div class="observation-list">
+					{#each observations as observation (observation.id)}
+						<div class="observation-item">
+							<ObservationChip {observation} onclick={() => toggleExpand(observation)} />
+							{#if expandedObservationId === observation.id}
+								<div class="observation-edit">
+									<label>
+										Status
+										<select bind:value={editStatusDraft}>
+											<option value="suspected">suspected</option>
+											<option value="confirmed">confirmed</option>
+											<option value="remediated">remediated</option>
+											<option value="false_positive">false positive</option>
+										</select>
+									</label>
+									<label>
+										Severity override
+										<input bind:value={editSeverityDraft} placeholder={observation.default_severity} />
+									</label>
+									<label>
+										Evidence
+										<textarea bind:value={editEvidenceDraft} rows="4"></textarea>
+									</label>
+									<div class="observation-edit-actions">
+										<button onclick={() => saveObservationEdit(observation.id)}>Save</button>
+										<button onclick={() => handleDeleteObservation(observation.id)}>Remove</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
 			</section>
 		{/if}
 	{/if}
@@ -365,5 +494,34 @@
 		text-align: left;
 		padding: 0.4rem 0.6rem;
 		border-bottom: 1px solid #ddd;
+	}
+	.observation-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+	.observation-item {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+	.observation-edit {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		padding: 0.6rem;
+		width: 100%;
+		max-width: 28rem;
+	}
+	.observation-edit textarea {
+		font-family: inherit;
+	}
+	.observation-edit-actions {
+		display: flex;
+		gap: 0.5rem;
 	}
 </style>
