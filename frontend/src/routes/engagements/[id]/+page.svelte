@@ -1,44 +1,38 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { getEngagement, updateEngagement } from '$lib/api/engagements';
-	import type { Engagement } from '$lib/api/engagements';
-	import { listScope, createScopeItem, deleteScopeItem } from '$lib/api/scope';
-	import type { ScopeItem } from '$lib/api/scope';
-	import { listMembers, addMember, updateMemberRole, removeMember } from '$lib/api/members';
-	import type { Member } from '$lib/api/members';
-	import Dashboard from '$lib/components/Dashboard.svelte';
+	import type { ElementDefinition } from 'cytoscape';
+	import { getGraph } from '$lib/api/graph';
+	import type { GraphSuggestion } from '$lib/api/graph';
+	import { listHosts } from '$lib/api/hosts';
+	import type { Host } from '$lib/api/hosts';
+	import { createTrustRelationship } from '$lib/api/trust_relationships';
+	import AttackGraph from '$lib/components/AttackGraph.svelte';
 
 	const engagementId = $page.params.id as string;
 
-	let engagement = $state<Engagement | null>(null);
-	let scopeItems = $state<ScopeItem[]>([]);
-	let members = $state<Member[]>([]);
-	let notesDraft = $state('');
+	let elements = $state<ElementDefinition[]>([]);
+	let suggestions = $state<GraphSuggestion[]>([]);
+	let hosts = $state<Host[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 
-	let newScopeKind = $state('ip');
-	let newScopeValue = $state('');
-
-	let newMemberEmail = $state('');
-	let newMemberRole = $state('tester');
+	let trustFromHostId = $state('');
+	let trustToHostId = $state('');
+	let trustKind = $state('domain_trust');
+	let trustNote = $state('');
 
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [e, scope, mem] = await Promise.all([
-				getEngagement(engagementId),
-				listScope(engagementId),
-				listMembers(engagementId)
-			]);
-			engagement = e;
-			scopeItems = scope;
-			members = mem;
-			notesDraft = e.global_notes_md;
+			const [graph, hostList] = await Promise.all([getGraph(engagementId), listHosts(engagementId)]);
+			suggestions = graph.suggestions;
+			hosts = hostList;
+			elements = [...graph.nodes, ...graph.edges] as ElementDefinition[];
 		} catch {
-			error = 'Failed to load engagement.';
+			error = 'Failed to load attack graph.';
 		} finally {
 			loading = false;
 		}
@@ -46,227 +40,135 @@
 
 	onMount(load);
 
-	async function saveNotes() {
-		if (!engagement) return;
+	function handleHostDblClick(hostId: string) {
+		goto(`/engagements/${engagementId}/hosts/${hostId}`);
+	}
+
+	async function handleAddTrust(e: SubmitEvent) {
+		e.preventDefault();
+		if (!trustFromHostId || !trustToHostId) return;
 		try {
-			engagement = await updateEngagement(engagementId, {
-				name: engagement.name,
-				status: engagement.status,
-				start_date: engagement.start_date,
-				end_date: engagement.end_date,
-				global_notes_md: notesDraft
+			await createTrustRelationship(engagementId, {
+				from_host_id: trustFromHostId,
+				to_host_id: trustToHostId,
+				kind: trustKind,
+				note: trustNote || null
 			});
+			trustFromHostId = '';
+			trustToHostId = '';
+			trustNote = '';
 			error = '';
+			await load();
 		} catch {
-			error = 'Failed to save notes.';
-		}
-	}
-
-	async function handleAddScope(e: SubmitEvent) {
-		e.preventDefault();
-		if (!newScopeValue.trim()) return;
-		try {
-			const item = await createScopeItem(engagementId, { kind: newScopeKind, value: newScopeValue });
-			scopeItems = [...scopeItems, item];
-			newScopeValue = '';
-		} catch {
-			error = 'Failed to add scope item.';
-		}
-	}
-
-	async function handleDeleteScope(id: string) {
-		try {
-			await deleteScopeItem(engagementId, id);
-			scopeItems = scopeItems.filter((s) => s.id !== id);
-		} catch {
-			error = 'Failed to remove scope item.';
-		}
-	}
-
-	async function handleAddMember(e: SubmitEvent) {
-		e.preventDefault();
-		if (!newMemberEmail.trim()) return;
-		try {
-			const member = await addMember(engagementId, newMemberEmail, newMemberRole);
-			members = [...members, member];
-			newMemberEmail = '';
-		} catch {
-			error = 'Failed to add member (check the email and your permissions).';
-		}
-	}
-
-	async function handleRoleChange(userId: string, role: string) {
-		try {
-			const updated = await updateMemberRole(engagementId, userId, role);
-			members = members.map((m) => (m.user_id === userId ? updated : m));
-		} catch {
-			error = 'Failed to update role.';
-		}
-	}
-
-	async function handleRemoveMember(userId: string) {
-		try {
-			await removeMember(engagementId, userId);
-			members = members.filter((m) => m.user_id !== userId);
-		} catch {
-			error = 'Failed to remove member.';
+			error = 'Failed to add trust relationship.';
 		}
 	}
 </script>
 
 <main>
-	{#if loading}
-		<p>Loading…</p>
-	{:else if !engagement}
-		<p class="error">{error || 'Engagement not found.'}</p>
-	{:else}
-		<p><a href="/engagements">&larr; All engagements</a></p>
-		<h1>{engagement.name}</h1>
-		<p class="meta">
-			Client: {engagement.client_name} · Status: {engagement.status}
-			{#if engagement.start_date || engagement.end_date}
-				· {engagement.start_date ?? '?'} &rarr; {engagement.end_date ?? '?'}
-			{/if}
-		</p>
-		<p><a href={`/engagements/${engagementId}/hosts`}>View hosts &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/credentials`}>View credentials &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/graph`}>View attack graph &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/replay`}>Replay engagement timeline &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/templates`}>View templates &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/findings`}>View findings &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/search`}>Search &rarr;</a></p>
-		<p><a href={`/engagements/${engagementId}/import`}>Import scan results &rarr;</a></p>
-		<p>
-			<a href={`/api/reports/${engagementId}`} target="_blank" rel="noopener">Preview report</a>
-			&middot;
-			<a href={`/api/reports/${engagementId}?format=pdf`} download="report.pdf">Download PDF</a>
-		</p>
+	<h1>Attack Graph</h1>
+	<p class="muted">Double-click a host node to open its host page.</p>
 
-		{#if error}
-			<p class="error">{error}</p>
-		{/if}
-
-		<Dashboard {engagementId} />
-
-		<section>
-			<h2>Global notes</h2>
-			<textarea bind:value={notesDraft} rows="8"></textarea>
-			<button onclick={saveNotes}>Save notes</button>
-		</section>
-
-		<section>
-			<h2>Scope</h2>
-			<table>
-				<thead>
-					<tr>
-						<th>Kind</th>
-						<th>Value</th>
-						<th>In scope</th>
-						<th>Note</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each scopeItems as item (item.id)}
-						<tr>
-							<td>{item.kind}</td>
-							<td>{item.value}</td>
-							<td>{item.in_scope ? 'yes' : 'no'}</td>
-							<td>{item.note ?? ''}</td>
-							<td><button onclick={() => handleDeleteScope(item.id)}>Remove</button></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-			<form onsubmit={handleAddScope}>
-				<select bind:value={newScopeKind}>
-					<option value="ip">IP</option>
-					<option value="cidr">CIDR</option>
-					<option value="domain">Domain</option>
-					<option value="url">URL</option>
-					<option value="asn">ASN</option>
-					<option value="exclusion">Exclusion</option>
-				</select>
-				<input bind:value={newScopeValue} placeholder="e.g. 10.10.10.0/24" required />
-				<button type="submit">Add scope item</button>
-			</form>
-		</section>
-
-		<section>
-			<h2>Team members</h2>
-			<table>
-				<thead>
-					<tr>
-						<th>Name</th>
-						<th>Email</th>
-						<th>Role</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each members as member (member.user_id)}
-						<tr>
-							<td>{member.display_name}</td>
-							<td>{member.email}</td>
-							<td>
-								<select
-									value={member.role}
-									onchange={(e) =>
-										handleRoleChange(member.user_id, (e.target as HTMLSelectElement).value)}
-								>
-									<option value="viewer">viewer</option>
-									<option value="tester">tester</option>
-									<option value="lead">lead</option>
-								</select>
-							</td>
-							<td><button onclick={() => handleRemoveMember(member.user_id)}>Remove</button></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-			<form onsubmit={handleAddMember}>
-				<input type="email" bind:value={newMemberEmail} placeholder="user@example.com" required />
-				<select bind:value={newMemberRole}>
-					<option value="viewer">viewer</option>
-					<option value="tester">tester</option>
-					<option value="lead">lead</option>
-				</select>
-				<button type="submit">Add member</button>
-			</form>
-		</section>
+	{#if error}
+		<p class="error">{error}</p>
 	{/if}
+
+	<form onsubmit={handleAddTrust} class="trust-form">
+		<select bind:value={trustFromHostId}>
+			<option value="" disabled selected>From host…</option>
+			{#each hosts as host (host.id)}
+				<option value={host.id}>{host.label}</option>
+			{/each}
+		</select>
+		<select bind:value={trustKind}>
+			<option value="domain_trust">domain trust</option>
+			<option value="admin_of">admin of</option>
+			<option value="shares_creds">shares creds</option>
+			<option value="session">session</option>
+		</select>
+		<select bind:value={trustToHostId}>
+			<option value="" disabled selected>To host…</option>
+			{#each hosts as host (host.id)}
+				<option value={host.id}>{host.label}</option>
+			{/each}
+		</select>
+		<input bind:value={trustNote} placeholder="note (optional)" />
+		<button type="submit">Add relationship</button>
+	</form>
+
+	<div class="layout">
+		{#if loading}
+			<p>Loading…</p>
+		{:else}
+			<AttackGraph {elements} onHostDblClick={handleHostDblClick} />
+		{/if}
+		<aside class="suggestions">
+			<h2>Suggested next steps</h2>
+			{#if loading}
+				<p>Loading…</p>
+			{:else if suggestions.length === 0}
+				<p class="muted">No suggestions yet — confirm an observation to see attack paths.</p>
+			{:else}
+				<ul>
+					{#each suggestions as s}
+						<li>
+							<strong>{s.host_label}</strong>: {s.observation_title}
+							<br />&rarr; <em>{s.technique}</em> &rarr; {s.outcome}
+							{#if s.next_step_md}
+								<p class="next-step">{s.next_step_md}</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</aside>
+	</div>
 </main>
 
 <style>
 	.error {
 		color: #c0392b;
 	}
-	.meta {
-		color: #555;
-		margin-bottom: 1rem;
-	}
-	section {
-		margin-top: 2rem;
-	}
-	table {
-		border-collapse: collapse;
-		width: 100%;
-		margin-bottom: 1rem;
-	}
-	th,
-	td {
-		text-align: left;
-		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
-	}
-	form {
+	.trust-form {
 		display: flex;
 		gap: 0.5rem;
-		align-items: center;
 		flex-wrap: wrap;
+		align-items: center;
+		margin-bottom: 1rem;
 	}
-	textarea {
-		width: 100%;
-		font-family: inherit;
+	.layout {
+		display: grid;
+		grid-template-columns: 1fr 20rem;
+		grid-template-rows: minmax(0, 1fr);
+		gap: 1rem;
+		height: 70vh;
+	}
+	.suggestions {
+		height: 100%;
+		overflow-y: auto;
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		padding: 0.75rem;
+		box-sizing: border-box;
+	}
+	.suggestions ul {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.suggestions li {
+		border-bottom: 1px solid #eee;
+		padding-bottom: 0.5rem;
+	}
+	.next-step {
+		font-size: 0.85rem;
+		color: #555;
+		margin: 0.3rem 0 0;
+	}
+	.muted {
+		color: #777;
 	}
 </style>
