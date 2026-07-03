@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
@@ -145,6 +146,10 @@ async fn create_credential(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Credential audit snapshots reuse the already-redacted response type,
+    // so the secret is never written to audit_log either.
+    log_action(&state.pool, user.id, "create", "credential", id, None::<&Credential>, Some(&credential)).await;
+
     Ok(Json(credential))
 }
 
@@ -178,6 +183,13 @@ async fn update_credential(
     if !valid_secret_type(&payload.secret_type) || !valid_origin(&payload.origin) {
         return Err(StatusCode::BAD_REQUEST);
     }
+
+    let before = sqlx::query_as::<_, Credential>(&format!("{CREDENTIAL_SELECT} WHERE id = $1"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let result = if let Some(secret) = &payload.secret {
         let encrypted = state.cred_cipher.encrypt(secret);
@@ -224,6 +236,8 @@ async fn update_credential(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "update", "credential", id, Some(&before), Some(&credential)).await;
+
     Ok(Json(credential))
 }
 
@@ -235,6 +249,13 @@ async fn delete_credential(
     let engagement_id = credential_engagement_id(&state.pool, id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
+    let before = sqlx::query_as::<_, Credential>(&format!("{CREDENTIAL_SELECT} WHERE id = $1"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let result = sqlx::query("DELETE FROM credentials WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
@@ -242,10 +263,12 @@ async fn delete_credential(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    log_action(&state.pool, user.id, "delete", "credential", id, Some(&before), None::<&Credential>).await;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Serialize)]

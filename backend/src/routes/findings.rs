@@ -8,6 +8,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
@@ -47,6 +48,7 @@ pub struct Finding {
     references_json: Value,
     status: String,
     source_observation_id: Option<Uuid>,
+    mitre_technique_ids: Value,
     created_at: DateTime<Utc>,
     #[sqlx(json)]
     affected_hosts: Vec<AffectedHost>,
@@ -60,7 +62,7 @@ pub struct AffectedHost {
 
 const FINDING_SELECT: &str = "SELECT f.id, f.engagement_id, f.title, f.cve, f.cvss_vector,
     f.cvss_score::float8 AS cvss_score, f.severity, f.description_md, f.remediation_md, f.poc_md,
-    f.references_json, f.status::text AS status, f.source_observation_id, f.created_at,
+    f.references_json, f.status::text AS status, f.source_observation_id, f.mitre_technique_ids, f.created_at,
     COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object('id', h.id, 'label', h.label)) FILTER (WHERE h.id IS NOT NULL),
         '[]'
@@ -87,6 +89,8 @@ pub struct FindingRequest {
     #[serde(default = "default_status")]
     status: String,
     source_observation_id: Option<Uuid>,
+    #[serde(default)]
+    mitre_technique_ids: Value,
     #[serde(default)]
     affected_host_ids: Vec<Uuid>,
 }
@@ -137,8 +141,8 @@ async fn create_finding(
 
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO findings (engagement_id, title, cve, cvss_vector, cvss_score, severity,
-         description_md, remediation_md, poc_md, references_json, status, source_observation_id)
-         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12)
+         description_md, remediation_md, poc_md, references_json, status, source_observation_id, mitre_technique_ids)
+         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12, $13)
          RETURNING id",
     )
     .bind(engagement_id)
@@ -153,6 +157,7 @@ async fn create_finding(
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
     .bind(payload.source_observation_id)
+    .bind(normalize_refs(payload.mitre_technique_ids.clone()))
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -175,6 +180,8 @@ async fn create_finding(
         .fetch_one(&state.pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    log_action(&state.pool, user.id, "create", "finding", id, None::<&Finding>, Some(&finding)).await;
 
     Ok(Json(finding))
 }
@@ -210,6 +217,13 @@ async fn update_finding(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    let before = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let mut tx = state
         .pool
         .begin()
@@ -219,7 +233,7 @@ async fn update_finding(
     let result = sqlx::query(
         "UPDATE findings SET title = $1, cve = $2, cvss_vector = $3, cvss_score = $4::numeric,
          severity = $5, description_md = $6, remediation_md = $7, poc_md = $8, references_json = $9,
-         status = $10::finding_status, source_observation_id = $11 WHERE id = $12",
+         status = $10::finding_status, source_observation_id = $11, mitre_technique_ids = $12 WHERE id = $13",
     )
     .bind(&payload.title)
     .bind(&payload.cve)
@@ -232,6 +246,7 @@ async fn update_finding(
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
     .bind(payload.source_observation_id)
+    .bind(normalize_refs(payload.mitre_technique_ids.clone()))
     .bind(id)
     .execute(&mut *tx)
     .await
@@ -266,6 +281,8 @@ async fn update_finding(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "update", "finding", id, Some(&before), Some(&finding)).await;
+
     Ok(Json(finding))
 }
 
@@ -277,6 +294,13 @@ async fn delete_finding(
     let engagement_id = finding_engagement_id(&state.pool, id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
+    let before = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let result = sqlx::query("DELETE FROM findings WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
@@ -284,10 +308,48 @@ async fn delete_finding(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    log_action(&state.pool, user.id, "delete", "finding", id, Some(&before), None::<&Finding>).await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct HistoryEntry {
+    id: Uuid,
+    action: String,
+    actor_email: Option<String>,
+    before: Option<Value>,
+    after: Option<Value>,
+    at: DateTime<Utc>,
+}
+
+/// Version history for a finding, reusing audit_log rather than a separate
+/// history table -- each audit entry's before/after snapshot already IS a
+/// version diff; a dedicated row-versioning table would just duplicate it.
+async fn get_finding_history(
+    State(state): State<AppState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<HistoryEntry>>, StatusCode> {
+    let engagement_id = finding_engagement_id(&state.pool, id).await?;
+    require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
+
+    let history = sqlx::query_as::<_, HistoryEntry>(
+        "SELECT a.id, a.action, u.email AS actor_email, a.before, a.after, a.at
+         FROM audit_log a
+         LEFT JOIN users u ON u.id = a.actor_id
+         WHERE a.subject_type = 'finding' AND a.subject_id = $1
+         ORDER BY a.at DESC",
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(history))
 }
 
 pub fn router() -> Router<AppState> {
@@ -300,4 +362,5 @@ pub fn router() -> Router<AppState> {
             "/findings/{id}",
             get(get_finding).put(update_finding).delete(delete_finding),
         )
+        .route("/findings/{id}/history", get(get_finding_history))
 }

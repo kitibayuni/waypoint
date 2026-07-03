@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
@@ -232,6 +233,8 @@ async fn create_host(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "create", "host", host_id, None::<&Host>, Some(&host)).await;
+
     Ok(Json(host))
 }
 
@@ -266,6 +269,13 @@ async fn update_host(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    let before = sqlx::query_as::<_, Host>(&format!("{HOST_SELECT} WHERE h.id = $1 GROUP BY h.id"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let result = sqlx::query(
         "UPDATE hosts SET label = $1, hostname = $2, os = $3, os_family = $4, criticality = $5,
          status = $6::host_status, general_info_md = $7 WHERE id = $8",
@@ -292,6 +302,8 @@ async fn update_host(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "update", "host", id, Some(&before), Some(&host)).await;
+
     Ok(Json(host))
 }
 
@@ -303,6 +315,13 @@ async fn delete_host(
     let engagement_id = host_engagement_id(&state.pool, id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
+    let before = sqlx::query_as::<_, Host>(&format!("{HOST_SELECT} WHERE h.id = $1 GROUP BY h.id"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let result = sqlx::query("DELETE FROM hosts WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
@@ -310,10 +329,12 @@ async fn delete_host(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    log_action(&state.pool, user.id, "delete", "host", id, Some(&before), None::<&Host>).await;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn add_address(

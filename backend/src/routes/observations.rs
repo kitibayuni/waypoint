@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::routes::hosts::host_engagement_id;
@@ -130,6 +131,8 @@ async fn create_observation(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "create", "observation", obs_id, None::<&Observation>, Some(&observation)).await;
+
     Ok(Json(observation))
 }
 
@@ -145,6 +148,13 @@ async fn update_observation(
     if !valid_status(&payload.status) {
         return Err(StatusCode::BAD_REQUEST);
     }
+
+    let before = sqlx::query_as::<_, Observation>(&format!("{OBSERVATION_SELECT} WHERE o.id = $1"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let result = sqlx::query(
         "UPDATE observations SET status = $1::observation_status, evidence_md = $2, severity_override = $3
@@ -169,6 +179,8 @@ async fn update_observation(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    log_action(&state.pool, user.id, "update", "observation", id, Some(&before), Some(&observation)).await;
+
     Ok(Json(observation))
 }
 
@@ -180,6 +192,13 @@ async fn delete_observation(
     let engagement_id = observation_engagement_id(&state.pool, id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
+    let before = sqlx::query_as::<_, Observation>(&format!("{OBSERVATION_SELECT} WHERE o.id = $1"))
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let result = sqlx::query("DELETE FROM observations WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
@@ -187,10 +206,12 @@ async fn delete_observation(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    log_action(&state.pool, user.id, "delete", "observation", id, Some(&before), None::<&Observation>).await;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn router() -> Router<AppState> {
