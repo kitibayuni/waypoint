@@ -229,18 +229,65 @@ async fn delete_service(
     let engagement_id = host_engagement_id(&state.pool, host_id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
-    let result = sqlx::query("DELETE FROM services WHERE id = $1 AND host_id = $2")
-        .bind(service_id)
-        .bind(host_id)
-        .execute(&state.pool)
+    let mut tx = state
+        .pool
+        .begin()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if result.rows_affected() == 0 {
-        Err(StatusCode::NOT_FOUND)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+    let deleted: Option<(Option<String>,)> = sqlx::query_as(
+        "DELETE FROM services WHERE id = $1 AND host_id = $2 RETURNING name",
+    )
+    .bind(service_id)
+    .bind(host_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some((name,)) = deleted else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    // If this was the last service of that type on the host, de-instantiate the
+    // checklist that was auto-created for it (ADJUSTMENTS.txt: "if a service is
+    // removed, please adjust the checklist accordingly to de-instantiate").
+    if let Some(name) = &name {
+        let still_present: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM services WHERE host_id = $1 AND name = $2 LIMIT 1",
+        )
+        .bind(host_id)
+        .bind(name)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        if still_present.is_none() {
+            let template_id: Option<(Uuid,)> = sqlx::query_as(
+                "SELECT template_id FROM service_checklist_templates WHERE service_name = $1",
+            )
+            .bind(name)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            if let Some((template_id,)) = template_id {
+                sqlx::query(
+                    "DELETE FROM checklists WHERE host_id = $1 AND template_origin_id = $2",
+                )
+                .bind(host_id)
+                .bind(template_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
     }
+
+    tx.commit()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn router() -> Router<AppState> {
