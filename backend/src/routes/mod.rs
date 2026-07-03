@@ -3,6 +3,7 @@ pub mod checklists;
 pub mod clients;
 pub mod credential_usage;
 pub mod credentials;
+pub mod dashboard;
 pub mod engagements;
 pub mod findings;
 pub mod graph;
@@ -41,4 +42,5 @@ pub fn router() -> Router<AppState> {
         .merge(findings::router())
         .merge(attachments::router())
         .merge(search::router())
+        .merge(dashboard::router())
 }
