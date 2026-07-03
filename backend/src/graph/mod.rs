@@ -162,11 +162,18 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
                 .filter(|r| r.trigger_observation_type_id == o.observation_type_id)
             {
                 let technique_node_id = format!("technique:{}:{}", rule.id, o.id);
+                // The MITRE ID is folded directly into the node's label
+                // (not just carried as metadata) so it's visibly present on
+                // the rendered graph node, not only in the underlying data.
+                let label = match &rule.mitre_technique_id {
+                    Some(mitre_id) => format!("{} ({mitre_id})", rule.technique),
+                    None => rule.technique.clone(),
+                };
                 nodes.push(json!({
                     "data": {
                         "id": technique_node_id,
                         "type": "technique",
-                        "label": rule.technique,
+                        "label": label,
                         "outcome": rule.outcome,
                         "next_step_md": rule.next_step_md,
                         "mitre_technique_id": rule.mitre_technique_id,
