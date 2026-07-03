@@ -22,12 +22,34 @@
 	let newDomain = $state('');
 	let newSecret = $state('');
 	let newSecretType = $state('plaintext');
+	let newSourceHostId = $state('');
 	let newOrigin = $state('captured');
 	let newNotes = $state('');
 
 	let testHostId = $state('');
 	let testResult = $state('works');
 	let testPrivilege = $state('');
+
+	const groupedCredentials = $derived.by(() => {
+		const byHost = new Map<string, Credential[]>();
+		const unassigned: Credential[] = [];
+		for (const c of credentials) {
+			if (c.source_host_id) {
+				const list = byHost.get(c.source_host_id) ?? [];
+				list.push(c);
+				byHost.set(c.source_host_id, list);
+			} else {
+				unassigned.push(c);
+			}
+		}
+		const groups: { label: string; credentials: Credential[] }[] = [];
+		for (const host of hosts) {
+			const list = byHost.get(host.id);
+			if (list?.length) groups.push({ label: host.label, credentials: list });
+		}
+		if (unassigned.length > 0) groups.push({ label: 'Unassigned', credentials: unassigned });
+		return groups;
+	});
 
 	async function load() {
 		loading = true;
@@ -57,6 +79,7 @@
 				domain: newDomain || null,
 				secret: newSecret,
 				secret_type: newSecretType,
+				source_host_id: newSourceHostId || null,
 				origin: newOrigin,
 				notes_md: newNotes
 			});
@@ -64,6 +87,7 @@
 			newUsername = '';
 			newDomain = '';
 			newSecret = '';
+			newSourceHostId = '';
 			newNotes = '';
 			error = '';
 		} catch {
@@ -180,6 +204,15 @@
 					<option value="created">created</option>
 				</select>
 			</label>
+			<label>
+				Source host
+				<select bind:value={newSourceHostId}>
+					<option value="">(none)</option>
+					{#each hosts as host (host.id)}
+						<option value={host.id}>{host.label}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 		<label>
 			Notes
@@ -193,20 +226,22 @@
 	{:else if credentials.length === 0}
 		<p>No credentials yet.</p>
 	{:else}
-		<table>
-			<thead>
-				<tr>
-					<th>Username</th>
-					<th>Domain</th>
-					<th>Type</th>
-					<th>Origin</th>
-					<th>Validated</th>
-					<th></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each credentials as credential (credential.id)}
-					<tr class="clickable" onclick={() => toggleExpand(credential)}>
+		{#each groupedCredentials as group (group.label)}
+			<h2>{group.label}</h2>
+			<table>
+				<thead>
+					<tr>
+						<th>Username</th>
+						<th>Domain</th>
+						<th>Type</th>
+						<th>Origin</th>
+						<th>Validated</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each group.credentials as credential (credential.id)}
+						<tr class="clickable" onclick={() => toggleExpand(credential)}>
 						<td>{credential.username}</td>
 						<td>{credential.domain ?? ''}</td>
 						<td>{credential.secret_type}</td>
@@ -284,6 +319,7 @@
 				{/each}
 			</tbody>
 		</table>
+		{/each}
 	{/if}
 </main>
 
