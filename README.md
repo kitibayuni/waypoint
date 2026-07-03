@@ -112,7 +112,12 @@ of the above takes effect on the next `docker compose up -d` (or restart of
 the affected service); existing logged-in sessions in the database are
 unaffected by `.env` changes.
 
-## Development phases
+## Further documentation
 
-See `../BUILD_PLAN.md` and `../DESIGN.md` (one level up, not tracked in this
-repo) for the full design and phased build history.
+- **`docs/ARCHITECTURE.md`** — maintainer-facing notes on how the system
+  fits together, the non-obvious design decisions, and known gaps/sharp
+  edges. Read this before making non-trivial changes.
+- **`docs/DESIGN.md`** — the original design spec (schema, API shape,
+  rationale) this app was built against.
+- **`docs/BUILD_PLAN.md`** — the phased build log (what was built when,
+  and why, in the order it happened).
