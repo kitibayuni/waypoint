@@ -93,7 +93,7 @@
 
 <style>
 	.cvss-calc {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 		margin-bottom: 1rem;
@@ -124,27 +124,27 @@
 	.severity-label {
 		font-size: 0.75rem;
 		text-transform: uppercase;
-		color: #777;
+		color: var(--text-muted);
 	}
 	.vector {
 		font-size: 0.8rem;
-		background: #f5f5f5;
+		background: var(--surface-2);
 		padding: 0.15rem 0.4rem;
 		border-radius: 4px;
 	}
 	.severity-none {
-		color: #898781;
+		color: var(--sev-none);
 	}
 	.severity-low {
-		color: #0ca30c;
+		color: var(--sev-low);
 	}
 	.severity-medium {
-		color: #fab219;
+		color: var(--sev-medium);
 	}
 	.severity-high {
-		color: #ec835a;
+		color: var(--sev-high);
 	}
 	.severity-critical {
-		color: #d03b3b;
+		color: var(--sev-critical);
 	}
 </style>

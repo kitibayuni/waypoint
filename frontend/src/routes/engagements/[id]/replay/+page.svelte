@@ -174,10 +174,10 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 	}
 	.layout {
 		display: grid;
@@ -189,7 +189,7 @@
 	.feed {
 		height: 100%;
 		overflow-y: auto;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 		box-sizing: border-box;
@@ -216,8 +216,8 @@
 		font: inherit;
 	}
 	.feed li.active button {
-		border-color: #333;
-		background: #f0f0f0;
+		border-color: var(--accent);
+		background: var(--surface-2);
 	}
 	.feed li.future button {
 		opacity: 0.4;
@@ -225,15 +225,15 @@
 	.event-type {
 		font-size: 0.7rem;
 		text-transform: uppercase;
-		color: #888;
+		color: var(--text-muted);
 	}
 	.summary {
 		font-size: 0.8rem;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.feed time {
 		font-size: 0.75rem;
-		color: #999;
+		color: var(--text-muted);
 	}
 	.scrubber {
 		margin-top: 1rem;

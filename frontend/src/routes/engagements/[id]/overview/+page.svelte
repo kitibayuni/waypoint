@@ -230,10 +230,10 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.meta {
-		color: #555;
+		color: var(--text-muted);
 		margin-bottom: 1rem;
 	}
 	section {
@@ -248,7 +248,7 @@
 	td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	form {
 		display: flex;

@@ -107,8 +107,8 @@
 		min-width: 0;
 		position: relative;
 		overflow: hidden;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
-		background: #fafafa;
+		background: var(--surface);
 	}
 </style>

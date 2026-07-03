@@ -108,7 +108,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	form {
 		display: flex;

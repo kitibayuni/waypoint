@@ -26,14 +26,14 @@
 <style>
 	.host-card {
 		display: block;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem 1rem;
 		text-decoration: none;
 		color: inherit;
 	}
 	.host-card:hover {
-		border-color: #999;
+		border-color: var(--text-muted);
 	}
 	.host-card-header {
 		display: flex;
@@ -45,11 +45,11 @@
 		text-transform: uppercase;
 		padding: 0.1rem 0.5rem;
 		border-radius: 999px;
-		background: #eee;
+		background: var(--surface-2);
 	}
 	.line {
 		font-size: 0.9rem;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.addresses {
 		font-family: monospace;
@@ -62,7 +62,7 @@
 	}
 	.tag {
 		font-size: 0.75rem;
-		background: #eef;
+		background: var(--surface-3);
 		padding: 0.1rem 0.5rem;
 		border-radius: 999px;
 	}

@@ -17,28 +17,28 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 999px;
 		padding: 0.25rem 0.7rem;
 		font-size: 0.85rem;
 		cursor: pointer;
-		background: #fafafa;
+		background: var(--surface);
 	}
 	.status-confirmed {
-		border-color: #c0392b;
-		background: #fdecea;
+		border-color: var(--error);
+		background: var(--error-bg);
 	}
 	.status-suspected {
-		border-color: #d4a017;
-		background: #fff8e1;
+		border-color: var(--warning);
+		background: var(--warning-bg);
 	}
 	.status-remediated {
-		border-color: #27ae60;
-		background: #eafaf1;
+		border-color: var(--success);
+		background: var(--success-bg);
 	}
 	.status-false_positive {
-		border-color: #999;
-		background: #f0f0f0;
+		border-color: var(--text-muted);
+		background: var(--surface-2);
 		text-decoration: line-through;
 		opacity: 0.7;
 	}

@@ -20,21 +20,21 @@
 	// one hue with monotone lightness rather than distinct categorical hues.
 	const HOST_STAGES = ['discovered', 'enumerating', 'exploited', 'owned', 'cleared'];
 	const ORDINAL_RAMP: Record<string, string> = {
-		discovered: '#86b6ef',
-		enumerating: '#5598e7',
-		exploited: '#2a78d6',
-		owned: '#1c5cab',
-		cleared: '#104281'
+		discovered: '#cfe3fb',
+		enumerating: '#8fbdf0',
+		exploited: '#5b93dc',
+		owned: '#3a6ec2',
+		cleared: '#24508f'
 	};
 
 	// Findings severity is a state/status job (good -> critical), so it wears
 	// the fixed, reserved status palette rather than categorical hues.
 	const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 	const SEVERITY_STATUS: Record<string, { color: string; role: string }> = {
-		critical: { color: '#d03b3b', role: 'critical' },
-		high: { color: '#ec835a', role: 'serious' },
-		medium: { color: '#fab219', role: 'warning' },
-		low: { color: '#0ca30c', role: 'good' }
+		critical: { color: 'var(--sev-critical)', role: 'critical' },
+		high: { color: 'var(--sev-high)', role: 'serious' },
+		medium: { color: 'var(--sev-medium)', role: 'warning' },
+		low: { color: 'var(--sev-low)', role: 'good' }
 	};
 
 	async function load() {
@@ -70,7 +70,7 @@
 					{ selector: 'node[type = "technique"]', style: { 'background-color': '#6a3ba0' } },
 					{
 						selector: 'edge',
-						style: { width: 1, 'line-color': '#ccc', 'curve-style': 'bezier' }
+						style: { width: 1, 'line-color': '#5a6270', 'curve-style': 'bezier' }
 					}
 				],
 				layout: { name: 'cose', animate: false },
@@ -215,17 +215,17 @@
 
 <style>
 	.dashboard {
-		--surface-1: #fcfcfb;
-		--text-primary: #0b0b0b;
-		--text-secondary: #52514e;
-		--muted: #898781;
-		--gridline: #e1e0d9;
+		--surface-1: var(--surface);
+		--text-primary: var(--text);
+		--text-secondary: var(--text-muted);
+		--muted: var(--text-faint);
+		--gridline: var(--border);
 		--sequential-400: #3987e5;
-		--sequential-150: #b7d3f6;
+		--sequential-150: #29344a;
 		margin-bottom: 2rem;
 	}
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.kpi-row {
 		display: grid;
@@ -332,7 +332,7 @@
 	}
 	.mini-graph {
 		height: 14rem;
-		background: #fafafa;
+		background: var(--surface);
 		border: 1px solid var(--gridline);
 		border-radius: 6px;
 	}

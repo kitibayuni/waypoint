@@ -36,7 +36,7 @@
 
 <style>
 	.checklist {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 		margin-bottom: 1rem;
@@ -60,7 +60,7 @@
 	.state {
 		font-size: 0.7rem;
 		text-transform: uppercase;
-		border: 1px solid #ccc;
+		border: 1px solid var(--border-strong);
 		border-radius: 999px;
 		padding: 0.15rem 0.5rem;
 		cursor: pointer;
@@ -68,25 +68,25 @@
 		text-align: center;
 	}
 	.state-todo {
-		background: #f0f0f0;
+		background: var(--surface-2);
 	}
 	.state-doing {
-		background: #fff8e1;
-		border-color: #d4a017;
+		background: var(--warning-bg);
+		border-color: var(--warning);
 	}
 	.state-done {
-		background: #eafaf1;
-		border-color: #27ae60;
+		background: var(--success-bg);
+		border-color: var(--success);
 	}
 	.state-na {
-		background: #f5f5f5;
-		color: #999;
+		background: var(--surface-2);
+		color: var(--text-muted);
 	}
 	.done {
 		text-decoration: line-through;
-		color: #777;
+		color: var(--text-muted);
 	}
 	.na {
-		color: #aaa;
+		color: var(--text-faint);
 	}
 </style>

@@ -289,7 +289,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	form {
 		display: flex;
@@ -317,17 +317,17 @@
 	td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	tr.clickable {
 		cursor: pointer;
 	}
 	tr.clickable:hover {
-		background: #f7f7f7;
+		background: var(--surface-2);
 	}
 	.expanded {
 		padding: 0.75rem;
-		background: #fafafa;
+		background: var(--surface);
 		border-radius: 6px;
 		display: flex;
 		flex-direction: column;
@@ -343,7 +343,7 @@
 		padding-left: 1.2rem;
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 	}
 	.inline-form {
@@ -353,9 +353,9 @@
 		align-items: center;
 	}
 	.reuse-flag {
-		color: #9a6700;
-		background: #fff8e1;
-		border: 1px solid #f0d58c;
+		color: var(--warning);
+		background: var(--warning-bg);
+		border: 1px solid var(--warning);
 		border-radius: 4px;
 		padding: 0.4rem 0.6rem;
 		font-size: 0.85rem;

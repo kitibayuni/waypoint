@@ -308,13 +308,13 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.tabs {
 		display: flex;
 		gap: 0.5rem;
 		margin: 1rem 0;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	.tabs button {
 		background: none;
@@ -324,7 +324,7 @@
 		border-bottom: 2px solid transparent;
 	}
 	.tabs button.active {
-		border-bottom-color: #333;
+		border-bottom-color: var(--accent);
 		font-weight: 600;
 	}
 	.grid {
@@ -364,7 +364,7 @@
 		padding: 0;
 		margin: 0 0 0.75rem;
 		font-size: 0.85rem;
-		color: #555;
+		color: var(--text-muted);
 	}
 	.history-list {
 		list-style: none;
@@ -375,7 +375,7 @@
 		gap: 0.75rem;
 	}
 	.history-list > li {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.6rem 0.75rem;
 	}
@@ -384,12 +384,12 @@
 		gap: 0.75rem;
 		align-items: baseline;
 		font-size: 0.85rem;
-		color: #555;
+		color: var(--text-muted);
 		margin-bottom: 0.4rem;
 	}
 	.history-head strong {
 		text-transform: uppercase;
-		color: #333;
+		color: var(--text);
 	}
 	.history-diff {
 		display: flex;
@@ -405,18 +405,18 @@
 	}
 	.diff-key {
 		font-weight: 600;
-		color: #333;
+		color: var(--text);
 	}
 	.diff-before {
-		color: #c0392b;
+		color: var(--error);
 		text-decoration: line-through;
 		word-break: break-word;
 	}
 	.diff-after {
-		color: #0ca30c;
+		color: var(--success);
 		word-break: break-word;
 	}
 	.diff-arrow {
-		color: #888;
+		color: var(--text-muted);
 	}
 </style>

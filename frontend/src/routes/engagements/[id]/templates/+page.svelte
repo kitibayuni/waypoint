@@ -271,13 +271,13 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.message {
-		color: #2a7a2a;
+		color: var(--success);
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 	}
 	form {
@@ -303,7 +303,7 @@
 		font-size: 0.85rem;
 	}
 	.template-card {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 		margin-bottom: 0.75rem;

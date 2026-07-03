@@ -597,13 +597,13 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.tabs {
 		display: flex;
 		gap: 0.5rem;
 		margin: 1rem 0;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	.tabs button {
 		background: none;
@@ -613,7 +613,7 @@
 		border-bottom: 2px solid transparent;
 	}
 	.tabs button.active {
-		border-bottom-color: #333;
+		border-bottom-color: var(--accent);
 		font-weight: 600;
 	}
 	.grid {
@@ -641,7 +641,7 @@
 		margin: 0.5rem 0;
 	}
 	.chip {
-		background: #eee;
+		background: var(--surface-2);
 		border-radius: 999px;
 		padding: 0.15rem 0.4rem 0.15rem 0.7rem;
 		display: flex;
@@ -672,7 +672,7 @@
 	td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	.observation-list {
 		display: flex;
@@ -690,7 +690,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.6rem;
 		width: 100%;
@@ -704,7 +704,7 @@
 		gap: 0.5rem;
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 	}
 	.access-list {
 		list-style: none;

@@ -130,7 +130,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.notes {
 		display: flex;
@@ -138,7 +138,7 @@
 		gap: 0.75rem;
 	}
 	.note {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 	}

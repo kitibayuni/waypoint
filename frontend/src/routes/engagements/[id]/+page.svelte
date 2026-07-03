@@ -127,7 +127,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.trust-form {
 		display: flex;
@@ -146,7 +146,7 @@
 	.suggestions {
 		height: 100%;
 		overflow-y: auto;
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem;
 		box-sizing: border-box;
@@ -160,15 +160,15 @@
 		gap: 0.75rem;
 	}
 	.suggestions li {
-		border-bottom: 1px solid #eee;
+		border-bottom: 1px solid var(--border);
 		padding-bottom: 0.5rem;
 	}
 	.next-step {
 		font-size: 0.85rem;
-		color: #555;
+		color: var(--text-muted);
 		margin: 0.3rem 0 0;
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 	}
 </style>

@@ -67,7 +67,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.audit-list {
 		list-style: none;
@@ -78,7 +78,7 @@
 		gap: 0.75rem;
 	}
 	.audit-list > li {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.6rem 0.75rem;
 	}
@@ -88,12 +88,12 @@
 		align-items: baseline;
 		flex-wrap: wrap;
 		font-size: 0.85rem;
-		color: #555;
+		color: var(--text-muted);
 		margin-bottom: 0.4rem;
 	}
 	.audit-head strong {
 		text-transform: uppercase;
-		color: #333;
+		color: var(--text);
 	}
 	.subject {
 		font-weight: 600;
@@ -112,18 +112,18 @@
 	}
 	.diff-key {
 		font-weight: 600;
-		color: #333;
+		color: var(--text);
 	}
 	.diff-before {
-		color: #c0392b;
+		color: var(--error);
 		text-decoration: line-through;
 		word-break: break-word;
 	}
 	.diff-after {
-		color: #0ca30c;
+		color: var(--success);
 		word-break: break-word;
 	}
 	.diff-arrow {
-		color: #888;
+		color: var(--text-muted);
 	}
 </style>

@@ -104,10 +104,10 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 	}
 	.search-form {
 		display: flex;
@@ -139,20 +139,20 @@
 		gap: 0.75rem;
 	}
 	.results li {
-		border-bottom: 1px solid #eee;
+		border-bottom: 1px solid var(--border);
 		padding-bottom: 0.6rem;
 	}
 	.type-badge {
 		display: inline-block;
 		font-size: 0.7rem;
 		text-transform: uppercase;
-		background: #eee;
+		background: var(--surface-2);
 		border-radius: 999px;
 		padding: 0.1rem 0.5rem;
 		margin-right: 0.5rem;
 	}
 	.snippet {
-		color: #555;
+		color: var(--text-muted);
 		font-size: 0.9rem;
 		margin: 0.25rem 0 0;
 	}

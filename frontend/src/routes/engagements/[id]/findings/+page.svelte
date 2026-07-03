@@ -87,7 +87,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.inline-form {
 		display: flex;
@@ -106,25 +106,25 @@
 	td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	tr {
 		cursor: pointer;
 	}
 	tr:hover {
-		background: #f7f7f7;
+		background: var(--surface-2);
 	}
 	.severity-critical {
-		color: #922b21;
+		color: var(--sev-critical);
 		font-weight: 600;
 	}
 	.severity-high {
-		color: #c0392b;
+		color: var(--sev-high);
 	}
 	.severity-medium {
-		color: #d4a017;
+		color: var(--sev-medium);
 	}
 	.severity-low {
-		color: #2a7a2a;
+		color: var(--sev-low);
 	}
 </style>

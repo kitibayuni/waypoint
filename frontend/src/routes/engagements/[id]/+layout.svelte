@@ -29,7 +29,7 @@
 		flex-wrap: wrap;
 		padding: 0.6rem 0;
 		margin-bottom: 1rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 		font-size: 0.9rem;
 	}
 	.engagement-nav a {

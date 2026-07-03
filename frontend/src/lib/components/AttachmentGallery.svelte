@@ -97,7 +97,7 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.gallery {
 		display: grid;
@@ -106,7 +106,7 @@
 		margin-bottom: 1rem;
 	}
 	.attachment-card {
-		border: 1px solid #ddd;
+		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.5rem;
 		display: flex;
@@ -122,14 +122,14 @@
 	.file-link {
 		display: block;
 		padding: 0.5rem;
-		background: #f5f5f5;
+		background: var(--surface-2);
 		border-radius: 4px;
 		text-align: center;
 		word-break: break-all;
 	}
 	.meta {
 		font-size: 0.8rem;
-		color: #555;
+		color: var(--text-muted);
 		word-break: break-all;
 	}
 	.upload-form {

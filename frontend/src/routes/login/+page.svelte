@@ -60,7 +60,7 @@
 		font-size: 0.9rem;
 	}
 	.error {
-		color: #c0392b;
+		color: var(--error);
 		font-size: 0.85rem;
 	}
 </style>

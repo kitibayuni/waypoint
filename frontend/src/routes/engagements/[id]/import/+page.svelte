@@ -131,10 +131,10 @@
 
 <style>
 	.error {
-		color: #c0392b;
+		color: var(--error);
 	}
 	.muted {
-		color: #777;
+		color: var(--text-muted);
 	}
 	.upload-form {
 		display: flex;
@@ -158,7 +158,7 @@
 	td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid #ddd;
+		border-bottom: 1px solid var(--border);
 	}
 	.action-badge {
 		font-size: 0.75rem;
@@ -167,11 +167,11 @@
 		padding: 0.1rem 0.5rem;
 	}
 	.action-create {
-		background: #eafaf1;
-		color: #27ae60;
+		background: var(--success-bg);
+		color: var(--success);
 	}
 	.action-merge {
-		background: #fff8e1;
-		color: #9a6700;
+		background: var(--warning-bg);
+		color: var(--warning);
 	}
 </style>
