@@ -8,6 +8,7 @@ pub mod engagements;
 pub mod findings;
 pub mod graph;
 pub mod hosts;
+pub mod import;
 pub mod members;
 pub mod notes;
 pub mod observation_types;
@@ -45,4 +46,5 @@ pub fn router() -> Router<AppState> {
         .merge(search::router())
         .merge(dashboard::router())
         .merge(reports::router())
+        .merge(import::router())
 }
