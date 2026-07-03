@@ -24,6 +24,7 @@ export interface Graph {
 	suggestions: GraphSuggestion[];
 }
 
-export function getGraph(engagementId: string): Promise<Graph> {
-	return apiGet(`/api/engagements/${engagementId}/graph`);
+export function getGraph(engagementId: string, asOf?: string): Promise<Graph> {
+	const query = asOf ? `?as_of=${encodeURIComponent(asOf)}` : '';
+	return apiGet(`/api/engagements/${engagementId}/graph${query}`);
 }
