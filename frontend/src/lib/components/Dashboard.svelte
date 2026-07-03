@@ -57,6 +57,8 @@
 							color: '#fff',
 							'text-valign': 'center',
 							'text-halign': 'center',
+							'text-wrap': 'wrap',
+							'text-max-width': '60px',
 							'font-size': '7px',
 							width: 'label',
 							height: 'label',
@@ -73,7 +75,19 @@
 						style: { width: 1, color: '#fff', 'line-color': '#5a6270', 'curve-style': 'bezier' }
 					}
 				],
-				layout: { name: 'cose', animate: false },
+				layout: {
+					name: 'cose',
+					animate: false,
+					fit: true,
+					padding: 20,
+					nodeDimensionsIncludeLabels: true,
+					componentSpacing: 80,
+					idealEdgeLength: () => 30,
+					edgeElasticity: () => 100,
+					gravity: 60,
+					numIter: 2000,
+					nodeOverlap: 10
+				},
 				userZoomingEnabled: false,
 				userPanningEnabled: false,
 				boxSelectionEnabled: false

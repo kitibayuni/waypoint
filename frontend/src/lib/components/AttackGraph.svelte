@@ -27,6 +27,8 @@
 						color: '#fff',
 						'text-valign': 'center',
 						'text-halign': 'center',
+						'text-wrap': 'wrap',
+						'text-max-width': '90px',
 						'font-size': '10px',
 						width: 'label',
 						height: 'label',
@@ -44,6 +46,11 @@
 						label: 'data(label)',
 						color: '#fff',
 						'font-size': '8px',
+						'text-rotation': 'autorotate',
+						'text-background-color': '#14161c',
+						'text-background-opacity': 0.85,
+						'text-background-padding': '2px',
+						'text-background-shape': 'roundrectangle',
 						width: 2,
 						'line-color': '#bbb',
 						'target-arrow-color': '#bbb',
@@ -68,7 +75,19 @@
 					style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
 				}
 			],
-			layout: { name: 'cose', animate: false }
+			layout: {
+				name: 'cose',
+				animate: false,
+				fit: true,
+				padding: 40,
+				nodeDimensionsIncludeLabels: true,
+				componentSpacing: 150,
+				idealEdgeLength: () => 60,
+				edgeElasticity: () => 100,
+				gravity: 60,
+				numIter: 2000,
+				nodeOverlap: 20
+			}
 		});
 
 		cy.on('dbltap', 'node[type = "host"]', (evt) => {
