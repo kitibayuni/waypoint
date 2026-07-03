@@ -1,22 +1,37 @@
 <script lang="ts">
 	import type { Checklist } from '$lib/api/checklists';
-	import { updateChecklistItemState } from '$lib/api/checklists';
+	import { updateChecklistItem } from '$lib/api/checklists';
 
 	type ChecklistItemState = 'todo' | 'doing' | 'done' | 'na';
+	type ChecklistItemAssessment = 'safe' | 'undecided' | 'exploit';
 
 	let { checklist, onchange }: { checklist: Checklist; onchange?: (checklist: Checklist) => void } =
 		$props();
 
 	const states: ChecklistItemState[] = ['todo', 'doing', 'done', 'na'];
 
-	async function cycleState(itemId: string, current: ChecklistItemState) {
-		const next = states[(states.indexOf(current) + 1) % states.length];
-		const updated = await updateChecklistItemState(itemId, next);
+	async function apply(itemId: string, state: string, assessment: string) {
+		const updated = await updateChecklistItem(itemId, state, assessment);
 		const newChecklist: Checklist = {
 			...checklist,
 			items: checklist.items.map((i) => (i.id === itemId ? updated : i))
 		};
 		onchange?.(newChecklist);
+	}
+
+	function cycleState(itemId: string, current: ChecklistItemState, assessment: string) {
+		const next = states[(states.indexOf(current) + 1) % states.length];
+		apply(itemId, next, assessment);
+	}
+
+	// Safe/EXPLOIT both auto-complete the item; Undecided leaves the current state alone.
+	function changeAssessment(
+		itemId: string,
+		currentState: ChecklistItemState,
+		assessment: ChecklistItemAssessment
+	) {
+		const state = assessment === 'safe' || assessment === 'exploit' ? 'done' : currentState;
+		apply(itemId, state, assessment);
 	}
 </script>
 
@@ -25,10 +40,32 @@
 	<ul>
 		{#each checklist.items as item (item.id)}
 			<li>
-				<button class="state state-{item.state}" onclick={() => cycleState(item.id, item.state)}>
+				<button
+					class="state state-{item.state}"
+					class:assessment-exploit={item.assessment === 'exploit'}
+					onclick={() => cycleState(item.id, item.state, item.assessment)}
+				>
 					{item.state}
 				</button>
-				<span class:done={item.state === 'done'} class:na={item.state === 'na'}>{item.text}</span>
+				<select
+					class="assessment"
+					value={item.assessment}
+					onchange={(e) =>
+						changeAssessment(
+							item.id,
+							item.state,
+							(e.target as HTMLSelectElement).value as ChecklistItemAssessment
+						)}
+				>
+					<option value="undecided">Undecided</option>
+					<option value="safe">Safe</option>
+					<option value="exploit">EXPLOIT</option>
+				</select>
+				<span
+					class:done={item.state === 'done'}
+					class:na={item.state === 'na'}
+					class:exploit={item.assessment === 'exploit'}>{item.text}</span
+				>
 			</li>
 		{/each}
 	</ul>
@@ -82,11 +119,24 @@
 		background: var(--surface-2);
 		color: var(--text-muted);
 	}
+	.state.assessment-exploit {
+		background: var(--error-bg);
+		border-color: var(--error);
+		color: var(--error);
+	}
+	.assessment {
+		font-size: 0.75rem;
+		width: 7rem;
+	}
 	.done {
 		text-decoration: line-through;
 		color: var(--text-muted);
 	}
 	.na {
 		color: var(--text-faint);
+	}
+	.exploit {
+		color: var(--error);
+		font-weight: 700;
 	}
 </style>

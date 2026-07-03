@@ -107,7 +107,7 @@
 			{#if loading}
 				<p>Loading…</p>
 			{:else if suggestions.length === 0}
-				<p class="muted">No suggestions yet — confirm an observation to see attack paths.</p>
+				<p class="muted">No suggestions yet.</p>
 			{:else}
 				<ul>
 					{#each suggestions as s}

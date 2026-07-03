@@ -12,9 +12,14 @@ use crate::routes::hosts::host_engagement_id;
 use crate::state::AppState;
 
 const VALID_STATES: [&str; 4] = ["todo", "doing", "done", "na"];
+const VALID_ASSESSMENTS: [&str; 3] = ["safe", "undecided", "exploit"];
 
 fn valid_state(s: &str) -> bool {
     VALID_STATES.contains(&s)
+}
+
+fn valid_assessment(s: &str) -> bool {
+    VALID_ASSESSMENTS.contains(&s)
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -23,6 +28,7 @@ pub struct ChecklistItem {
     checklist_id: Uuid,
     text: String,
     state: String,
+    assessment: String,
     position: i32,
 }
 
@@ -40,7 +46,7 @@ const CHECKLIST_SELECT: &str = "SELECT c.id, c.host_id, c.engagement_id, c.name,
     COALESCE(
         jsonb_agg(jsonb_build_object(
             'id', ci.id, 'checklist_id', ci.checklist_id, 'text', ci.text,
-            'state', ci.state::text, 'position', ci.position
+            'state', ci.state::text, 'assessment', ci.assessment::text, 'position', ci.position
         ) ORDER BY ci.position) FILTER (WHERE ci.id IS NOT NULL),
         '[]'
     ) AS items
@@ -85,6 +91,7 @@ async fn list_host_checklists(
 #[derive(Deserialize)]
 pub struct UpdateChecklistItemRequest {
     state: String,
+    assessment: String,
 }
 
 async fn update_checklist_item(
@@ -96,15 +103,17 @@ async fn update_checklist_item(
     let engagement_id = checklist_item_engagement_id(&state.pool, id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
-    if !valid_state(&payload.state) {
+    if !valid_state(&payload.state) || !valid_assessment(&payload.assessment) {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     let item = sqlx::query_as::<_, ChecklistItem>(
-        "UPDATE checklist_items SET state = $1::checklist_item_state WHERE id = $2
-         RETURNING id, checklist_id, text, state::text AS state, position",
+        "UPDATE checklist_items SET state = $1::checklist_item_state,
+         assessment = $2::checklist_item_assessment WHERE id = $3
+         RETURNING id, checklist_id, text, state::text AS state, assessment::text AS assessment, position",
     )
     .bind(&payload.state)
+    .bind(&payload.assessment)
     .bind(id)
     .fetch_optional(&state.pool)
     .await

@@ -5,6 +5,7 @@ export interface ChecklistItem {
 	checklist_id: string;
 	text: string;
 	state: 'todo' | 'doing' | 'done' | 'na';
+	assessment: 'safe' | 'undecided' | 'exploit';
 	position: number;
 }
 
@@ -20,6 +21,10 @@ export function listHostChecklists(hostId: string): Promise<Checklist[]> {
 	return apiGet(`/api/hosts/${hostId}/checklists`);
 }
 
-export function updateChecklistItemState(itemId: string, state: string): Promise<ChecklistItem> {
-	return apiSend(`/api/checklist-items/${itemId}`, 'PUT', { state });
+export function updateChecklistItem(
+	itemId: string,
+	state: string,
+	assessment: string
+): Promise<ChecklistItem> {
+	return apiSend(`/api/checklist-items/${itemId}`, 'PUT', { state, assessment });
 }

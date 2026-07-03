@@ -128,7 +128,7 @@
 	{#if loading}
 		<p>Loading…</p>
 	{:else if events.length === 0}
-		<p class="muted">No timeline events yet — add hosts, observations, or findings to see a replay.</p>
+		<p class="muted">No timeline events yet — add hosts or findings to see a replay.</p>
 	{:else}
 		<div class="layout">
 			<AttackGraph
