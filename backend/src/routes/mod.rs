@@ -12,6 +12,7 @@ pub mod members;
 pub mod notes;
 pub mod observation_types;
 pub mod observations;
+pub mod reports;
 pub mod scope;
 pub mod search;
 pub mod services;
@@ -43,4 +44,5 @@ pub fn router() -> Router<AppState> {
         .merge(attachments::router())
         .merge(search::router())
         .merge(dashboard::router())
+        .merge(reports::router())
 }
