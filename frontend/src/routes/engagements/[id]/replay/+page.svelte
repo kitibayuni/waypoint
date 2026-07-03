@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { onMount, onDestroy, tick } from 'svelte';
-	import cytoscape from 'cytoscape';
-	import type { Core, ElementDefinition } from 'cytoscape';
+	import { goto } from '$app/navigation';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import type { ElementDefinition } from 'cytoscape';
 	import { getGraph } from '$lib/api/graph';
 	import { getTimeline } from '$lib/api/timeline';
 	import type { TimelineEvent } from '$lib/api/timeline';
 	import { asOfTimestamp } from '$lib/stores/replay';
+	import AttackGraph from '$lib/components/AttackGraph.svelte';
 
 	const engagementId = $page.params.id as string;
 
-	let container: HTMLDivElement;
-	let cy: Core | null = null;
+	let elements = $state<ElementDefinition[]>([]);
 	let events = $state<TimelineEvent[]>([]);
 	let feedRefs: (HTMLLIElement | null)[] = [];
 	let index = $state(0);
@@ -43,60 +43,7 @@
 	async function loadGraphAsOf(at: string) {
 		try {
 			const graph = await getGraph(engagementId, at);
-			cy?.destroy();
-			cy = cytoscape({
-				container,
-				elements: [...graph.nodes, ...graph.edges] as ElementDefinition[],
-				style: [
-					{
-						selector: 'node',
-						style: {
-							label: 'data(label)',
-							color: '#fff',
-							'text-valign': 'center',
-							'text-halign': 'center',
-							'font-size': '10px',
-							width: 'label',
-							height: 'label',
-							padding: '10px',
-							shape: 'round-rectangle'
-						}
-					},
-					{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
-					{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
-					{ selector: 'node[type = "observation"]', style: { 'background-color': '#a03b3b' } },
-					{ selector: 'node[type = "technique"]', style: { 'background-color': '#6a3ba0' } },
-					{
-						selector: 'edge',
-						style: {
-							label: 'data(label)',
-							'font-size': '8px',
-							width: 2,
-							'line-color': '#bbb',
-							'target-arrow-color': '#bbb',
-							'target-arrow-shape': 'triangle',
-							'curve-style': 'bezier'
-						}
-					},
-					{
-						selector: 'edge[type = "attack-path"]',
-						style: {
-							'line-color': '#6a3ba0',
-							'target-arrow-color': '#6a3ba0',
-							'line-style': 'dashed'
-						}
-					},
-					{
-						selector: 'edge[type = "cred-reuse"]',
-						style: { 'line-color': '#a0663b', 'target-arrow-color': '#a0663b' }
-					},
-					{
-						selector: 'edge[type = "trust"]',
-						style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
-					}
-				],
-				layout: { name: 'cose', animate: false }
-			});
+			elements = [...graph.nodes, ...graph.edges] as ElementDefinition[];
 		} catch {
 			error = 'Failed to load attack graph.';
 		}
@@ -165,18 +112,14 @@
 
 	onMount(() => {
 		load();
-		return () => {
-			stopPlaying();
-			cy?.destroy();
-		};
 	});
 
 	onDestroy(stopPlaying);
 </script>
 
 <main>
-	<p><a href={`/engagements/${engagementId}`}>&larr; Engagement overview</a></p>
 	<h1>Replay</h1>
+	<p class="muted">Double-click a host node to open its host page.</p>
 
 	{#if error}
 		<p class="error">{error}</p>
@@ -186,42 +129,40 @@
 		<p>Loading…</p>
 	{:else if events.length === 0}
 		<p class="muted">No timeline events yet — add hosts, observations, or findings to see a replay.</p>
-	{/if}
-
-	<div class="layout" class:hidden={loading || events.length === 0}>
-		<div class="graph-container" bind:this={container}></div>
-		<aside class="feed">
-			<h2>Feed</h2>
-			<ul>
-				{#each events as ev, i (ev.subject_type + ev.subject_id + ev.at + ev.event_type)}
-					<li
-						bind:this={feedRefs[i]}
-						class:active={i === index}
-						class:future={i > index}
-					>
-						<button type="button" onclick={() => handleFeedClick(i)}>
-							<span class="event-type">{ev.event_type.replaceAll('_', ' ')}</span>
-							<strong>{ev.title}</strong>
-							{#if ev.summary}
-								<span class="summary">{ev.summary}</span>
-							{/if}
-							<time>{new Date(ev.at).toLocaleString()}</time>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		</aside>
-	</div>
-
-	{#if !loading && events.length > 0}
-		<div class="scrubber">
-			<input
-				type="range"
-				min="0"
-				max={events.length - 1}
-				value={index}
-				oninput={handleScrub}
+	{:else}
+		<div class="layout">
+			<AttackGraph
+				{elements}
+				onHostDblClick={(hostId) => {
+					stopPlaying();
+					goto(`/engagements/${engagementId}/hosts/${hostId}`);
+				}}
 			/>
+			<aside class="feed">
+				<h2>Feed</h2>
+				<ul>
+					{#each events as ev, i (ev.subject_type + ev.subject_id + ev.at + ev.event_type)}
+						<li
+							bind:this={feedRefs[i]}
+							class:active={i === index}
+							class:future={i > index}
+						>
+							<button type="button" onclick={() => handleFeedClick(i)}>
+								<span class="event-type">{ev.event_type.replaceAll('_', ' ')}</span>
+								<strong>{ev.title}</strong>
+								{#if ev.summary}
+									<span class="summary">{ev.summary}</span>
+								{/if}
+								<time>{new Date(ev.at).toLocaleString()}</time>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</aside>
+		</div>
+
+		<div class="scrubber">
+			<input type="range" min="0" max={events.length - 1} value={index} oninput={handleScrub} />
 			<div class="scrubber-controls">
 				<button type="button" onclick={togglePlay}>{playing ? '⏸ Pause' : '▶ Play'}</button>
 				<span>Day {currentDay} of {totalDays}</span>
@@ -241,17 +182,9 @@
 	.layout {
 		display: grid;
 		grid-template-columns: 1fr 22rem;
+		grid-template-rows: minmax(0, 1fr);
 		gap: 1rem;
 		height: 65vh;
-	}
-	.layout.hidden {
-		display: none;
-	}
-	.graph-container {
-		height: 100%;
-		border: 1px solid #ddd;
-		border-radius: 6px;
-		background: #fafafa;
 	}
 	.feed {
 		height: 100%;
