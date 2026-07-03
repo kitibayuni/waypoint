@@ -12,6 +12,12 @@
 	import { listAttachments } from '$lib/api/attachments';
 	import type { Attachment } from '$lib/api/attachments';
 	import AttachmentGallery from '$lib/components/AttachmentGallery.svelte';
+	import CvssCalculator from '$lib/components/CvssCalculator.svelte';
+	import type { CvssResult } from '$lib/cvss';
+	import { listMitreTechniques } from '$lib/api/mitre';
+	import type { MitreTechnique } from '$lib/api/mitre';
+	import { getFindingHistory } from '$lib/api/audit';
+	import type { FindingHistoryEntry } from '$lib/api/audit';
 
 	const engagementId = $page.params.id as string;
 	const findingId = $page.params.findingId as string;
@@ -20,9 +26,12 @@
 	let hosts = $state<Host[]>([]);
 	let notes = $state<Note[]>([]);
 	let attachments = $state<Attachment[]>([]);
+	let mitreTechniques = $state<MitreTechnique[]>([]);
+	let history = $state<FindingHistoryEntry[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state<'details' | 'notes' | 'attachments'>('details');
+	let activeTab = $state<'details' | 'notes' | 'attachments' | 'history'>('details');
+	let showCvssCalc = $state(false);
 
 	let titleDraft = $state('');
 	let cveDraft = $state('');
@@ -33,22 +42,31 @@
 	let descriptionDraft = $state('');
 	let remediationDraft = $state('');
 	let pocDraft = $state('');
+	let mitreIdsDraft = $state('');
 	let affectedHostIds = $state<string[]>([]);
+
+	function mitreName(id: string): string | null {
+		return mitreTechniques.find((t) => t.id === id)?.name ?? null;
+	}
 
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [f, hostList, noteList, attachmentList] = await Promise.all([
+			const [f, hostList, noteList, attachmentList, techniques, historyList] = await Promise.all([
 				getFinding(findingId),
 				listHosts(engagementId),
 				listNotes(engagementId, 'finding', findingId),
-				listAttachments(engagementId, 'finding', findingId)
+				listAttachments(engagementId, 'finding', findingId),
+				listMitreTechniques(),
+				getFindingHistory(findingId)
 			]);
 			finding = f;
 			hosts = hostList;
 			notes = noteList;
 			attachments = attachmentList;
+			mitreTechniques = techniques;
+			history = historyList;
 			titleDraft = f.title;
 			cveDraft = f.cve ?? '';
 			cvssVectorDraft = f.cvss_vector ?? '';
@@ -58,6 +76,7 @@
 			descriptionDraft = f.description_md;
 			remediationDraft = f.remediation_md;
 			pocDraft = f.poc_md;
+			mitreIdsDraft = f.mitre_technique_ids.join(', ');
 			affectedHostIds = f.affected_hosts.map((h) => h.id);
 		} catch {
 			error = 'Failed to load finding.';
@@ -70,6 +89,10 @@
 
 	async function handleSave() {
 		try {
+			const mitreIds = mitreIdsDraft
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
 			finding = await updateFinding(findingId, {
 				title: titleDraft,
 				cve: cveDraft || null,
@@ -80,12 +103,23 @@
 				description_md: descriptionDraft,
 				remediation_md: remediationDraft,
 				poc_md: pocDraft,
+				mitre_technique_ids: mitreIds,
 				affected_host_ids: affectedHostIds
 			});
+			history = await getFindingHistory(findingId);
 			error = '';
 		} catch {
 			error = 'Failed to save finding.';
 		}
+	}
+
+	function handleApplyCvss(result: CvssResult) {
+		cvssVectorDraft = result.vector;
+		cvssScoreDraft = result.score;
+		if (result.severity !== 'none') {
+			severityDraft = result.severity;
+		}
+		showCvssCalc = false;
 	}
 
 	async function handleDelete() {
@@ -129,6 +163,9 @@
 			<button class:active={activeTab === 'attachments'} onclick={() => (activeTab = 'attachments')}>
 				Attachments ({attachments.length})
 			</button>
+			<button class:active={activeTab === 'history'} onclick={() => (activeTab = 'history')}>
+				History ({history.length})
+			</button>
 		</nav>
 
 		{#if activeTab === 'details'}
@@ -171,6 +208,28 @@
 					</label>
 				</div>
 
+				<button type="button" onclick={() => (showCvssCalc = !showCvssCalc)}>
+					{showCvssCalc ? 'Hide' : 'Open'} CVSS calculator
+				</button>
+				{#if showCvssCalc}
+					<CvssCalculator onApply={handleApplyCvss} />
+				{/if}
+
+				<label>
+					MITRE ATT&amp;CK technique IDs (comma-separated)
+					<input bind:value={mitreIdsDraft} placeholder="T1557.001, T1558.003" />
+				</label>
+				{#if mitreIdsDraft.trim()}
+					<ul class="mitre-list">
+						{#each mitreIdsDraft.split(',').map((s) => s.trim()).filter(Boolean) as mid (mid)}
+							<li>
+								<code>{mid}</code>
+								{#if mitreName(mid)}&mdash; {mitreName(mid)}{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
 				<label>
 					Description
 					<textarea bind:value={descriptionDraft} rows="6"></textarea>
@@ -207,9 +266,41 @@
 			<section>
 				<NoteEditor {engagementId} subjectType="finding" subjectId={findingId} bind:notes />
 			</section>
-		{:else}
+		{:else if activeTab === 'attachments'}
 			<section>
 				<AttachmentGallery {engagementId} subjectType="finding" subjectId={findingId} bind:attachments />
+			</section>
+		{:else}
+			<section>
+				{#if history.length === 0}
+					<p>No history yet.</p>
+				{:else}
+					<ul class="history-list">
+						{#each history as entry (entry.id)}
+							<li>
+								<div class="history-head">
+									<strong>{entry.action}</strong>
+									<span>{entry.actor_email ?? 'unknown'}</span>
+									<time>{new Date(entry.at).toLocaleString()}</time>
+								</div>
+								<div class="history-diff">
+									{#each Array.from(new Set([...Object.keys(entry.before ?? {}), ...Object.keys(entry.after ?? {})])) as key (key)}
+										{@const beforeVal = entry.before ? entry.before[key] : undefined}
+										{@const afterVal = entry.after ? entry.after[key] : undefined}
+										{#if JSON.stringify(beforeVal) !== JSON.stringify(afterVal)}
+											<div class="diff-row">
+												<span class="diff-key">{key}</span>
+												<span class="diff-before">{JSON.stringify(beforeVal)}</span>
+												<span class="diff-arrow">&rarr;</span>
+												<span class="diff-after">{JSON.stringify(afterVal)}</span>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</section>
 		{/if}
 	{/if}
@@ -267,5 +358,65 @@
 	.actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+	.mitre-list {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+		color: #555;
+	}
+	.history-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.history-list > li {
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		padding: 0.6rem 0.75rem;
+	}
+	.history-head {
+		display: flex;
+		gap: 0.75rem;
+		align-items: baseline;
+		font-size: 0.85rem;
+		color: #555;
+		margin-bottom: 0.4rem;
+	}
+	.history-head strong {
+		text-transform: uppercase;
+		color: #333;
+	}
+	.history-diff {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		font-size: 0.8rem;
+	}
+	.diff-row {
+		display: grid;
+		grid-template-columns: 8rem 1fr auto 1fr;
+		gap: 0.4rem;
+		align-items: baseline;
+	}
+	.diff-key {
+		font-weight: 600;
+		color: #333;
+	}
+	.diff-before {
+		color: #c0392b;
+		text-decoration: line-through;
+		word-break: break-word;
+	}
+	.diff-after {
+		color: #0ca30c;
+		word-break: break-word;
+	}
+	.diff-arrow {
+		color: #888;
 	}
 </style>
