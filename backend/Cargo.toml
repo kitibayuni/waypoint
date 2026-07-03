@@ -11,6 +11,7 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 pulldown-cmark = "0.13.4"
 rand = "0.10.2"
+roxmltree = "0.21.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.11.0"

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod authz;
 pub mod crypto;
 pub mod graph;
+pub mod import;
 pub mod report;
 pub mod routes;
 pub mod search;
