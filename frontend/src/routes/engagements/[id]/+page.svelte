@@ -131,6 +131,8 @@
 		<p><a href={`/engagements/${engagementId}/credentials`}>View credentials &rarr;</a></p>
 		<p><a href={`/engagements/${engagementId}/graph`}>View attack graph &rarr;</a></p>
 		<p><a href={`/engagements/${engagementId}/templates`}>View templates &rarr;</a></p>
+		<p><a href={`/engagements/${engagementId}/findings`}>View findings &rarr;</a></p>
+		<p><a href={`/engagements/${engagementId}/search`}>Search &rarr;</a></p>
 
 		{#if error}
 			<p class="error">{error}</p>

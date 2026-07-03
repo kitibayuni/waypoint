@@ -24,8 +24,12 @@
 	import { listHostChecklists } from '$lib/api/checklists';
 	import type { Checklist } from '$lib/api/checklists';
 	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
-	import { listHostNotes } from '$lib/api/notes';
+	import { listNotes } from '$lib/api/notes';
 	import type { Note } from '$lib/api/notes';
+	import NoteEditor from '$lib/components/NoteEditor.svelte';
+	import { listAttachments } from '$lib/api/attachments';
+	import type { Attachment } from '$lib/api/attachments';
+	import AttachmentGallery from '$lib/components/AttachmentGallery.svelte';
 
 	const engagementId = $page.params.id as string;
 	const hostId = $page.params.hostId as string;
@@ -34,7 +38,9 @@
 	let services = $state<Service[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state<'general' | 'services' | 'observations' | 'checklists' | 'notes'>('general');
+	let activeTab = $state<
+		'general' | 'services' | 'observations' | 'checklists' | 'notes' | 'attachments'
+	>('general');
 
 	let labelDraft = $state('');
 	let hostnameDraft = $state('');
@@ -64,18 +70,20 @@
 
 	let checklists = $state<Checklist[]>([]);
 	let notes = $state<Note[]>([]);
+	let attachments = $state<Attachment[]>([]);
 
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [h, svc, obsTypes, obs, cls, hostNotes] = await Promise.all([
+			const [h, svc, obsTypes, obs, cls, hostNotes, hostAttachments] = await Promise.all([
 				getHost(hostId),
 				listServices(hostId),
 				listObservationTypes(),
 				listObservations(hostId),
 				listHostChecklists(hostId),
-				listHostNotes(hostId)
+				listNotes(engagementId, 'host', hostId),
+				listAttachments(engagementId, 'host', hostId)
 			]);
 			host = h;
 			services = svc;
@@ -83,6 +91,7 @@
 			observations = obs;
 			checklists = cls;
 			notes = hostNotes;
+			attachments = hostAttachments;
 			labelDraft = h.label;
 			hostnameDraft = h.hostname ?? '';
 			osDraft = h.os ?? '';
@@ -276,6 +285,9 @@
 			<button class:active={activeTab === 'notes'} onclick={() => (activeTab = 'notes')}>
 				Notes ({notes.length})
 			</button>
+			<button class:active={activeTab === 'attachments'} onclick={() => (activeTab = 'attachments')}>
+				Attachments ({attachments.length})
+			</button>
 		</nav>
 
 		{#if activeTab === 'general'}
@@ -445,18 +457,13 @@
 					{/each}
 				{/if}
 			</section>
+		{:else if activeTab === 'notes'}
+			<section>
+				<NoteEditor {engagementId} subjectType="host" subjectId={hostId} bind:notes />
+			</section>
 		{:else}
 			<section>
-				{#if notes.length === 0}
-					<p class="muted">No notes yet.</p>
-				{:else}
-					{#each notes as note (note.id)}
-						<article class="note">
-							{#if note.title}<h3>{note.title}</h3>{/if}
-							<pre>{note.body_md}</pre>
-						</article>
-					{/each}
-				{/if}
+				<AttachmentGallery {engagementId} subjectType="host" subjectId={hostId} bind:attachments />
 			</section>
 		{/if}
 	{/if}
@@ -572,19 +579,5 @@
 	}
 	.muted {
 		color: #777;
-	}
-	.note {
-		border: 1px solid #ddd;
-		border-radius: 6px;
-		padding: 0.75rem;
-		margin-bottom: 1rem;
-	}
-	.note h3 {
-		margin-top: 0;
-	}
-	.note pre {
-		white-space: pre-wrap;
-		font-family: inherit;
-		margin: 0;
 	}
 </style>
