@@ -14,8 +14,8 @@ pub struct MitreTechnique {
     url: Option<String>,
 }
 
-/// Unscoped reference lookup, like observation_types/templates -- any
-/// authenticated user can view it.
+/// Unscoped reference lookup, like templates -- any authenticated user can
+/// view it.
 async fn list_mitre_techniques(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MitreTechnique>>, StatusCode> {

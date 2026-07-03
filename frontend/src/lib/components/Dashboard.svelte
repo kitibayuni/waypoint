@@ -5,12 +5,10 @@
 	import { getDashboard } from '$lib/api/dashboard';
 	import type { Dashboard } from '$lib/api/dashboard';
 	import { getGraph } from '$lib/api/graph';
-	import type { GraphSuggestion } from '$lib/api/graph';
 
 	let { engagementId }: { engagementId: string } = $props();
 
 	let dashboard = $state<Dashboard | null>(null);
-	let suggestions = $state<GraphSuggestion[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 	let miniGraphContainer: HTMLDivElement = $state()!;
@@ -43,7 +41,6 @@
 		try {
 			const [dash, graph] = await Promise.all([getDashboard(engagementId), getGraph(engagementId)]);
 			dashboard = dash;
-			suggestions = graph.suggestions.slice(0, 5);
 
 			cy?.destroy();
 			cy = cytoscape({
@@ -68,8 +65,6 @@
 					},
 					{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
 					{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
-					{ selector: 'node[type = "observation"]', style: { 'background-color': '#a03b3b' } },
-					{ selector: 'node[type = "technique"]', style: { 'background-color': '#6a3ba0' } },
 					{
 						selector: 'edge',
 						style: { width: 1, color: '#fff', 'line-color': '#5a6270', 'curve-style': 'bezier' }
@@ -212,16 +207,6 @@
 			<section class="panel graph-panel">
 				<h3>Attack graph</h3>
 				<div class="mini-graph" bind:this={miniGraphContainer}></div>
-				<h4>Top suggested next steps</h4>
-				{#if suggestions.length === 0}
-					<p class="muted">No suggestions yet.</p>
-				{:else}
-					<ul class="suggestion-list">
-						{#each suggestions as s}
-							<li><strong>{s.host_label}</strong>: {s.technique} &rarr; {s.outcome}</li>
-						{/each}
-					</ul>
-				{/if}
 			</section>
 		</div>
 	{/if}
@@ -284,11 +269,6 @@
 		margin: 0 0 0.6rem;
 		font-size: 0.95rem;
 	}
-	.panel h4 {
-		margin: 0.75rem 0 0.4rem;
-		font-size: 0.85rem;
-		color: var(--text-secondary);
-	}
 	.meter {
 		height: 0.9rem;
 		background: var(--sequential-150);
@@ -349,17 +329,5 @@
 		background: var(--surface);
 		border: 1px solid var(--gridline);
 		border-radius: 6px;
-	}
-	.suggestion-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		font-size: 0.85rem;
-	}
-	.muted {
-		color: var(--muted);
 	}
 </style>

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -9,22 +7,12 @@ use uuid::Uuid;
 /// Cytoscape.js elements ({ data: {...} }) so the frontend can pass
 /// `[...nodes, ...edges]` straight into `cytoscape({ elements })`.
 ///
-/// Node types: host, credential, observation, technique (per DESIGN.md §5).
-/// Edge types: trust, cred-reuse, attack-path.
-///
-/// A "technique" node (and its attack-path edge) is generated for every
-/// enabled attack_path_rule whose trigger observation type matches a
-/// *confirmed* observation on some host — 'confirmed' is the closest
-/// existing signal for "the trigger genuinely exists", and observations
-/// already moved to 'remediated' or 'false_positive' no longer suggest a
-/// live path (§4.9: "whose outcome isn't yet achieved").
+/// Node types: host, credential. Edge types: trust, cred-reuse.
 ///
 /// `as_of`, when set, replays the graph as it looked at that moment
 /// (DESIGN.md §8.2): every contributing query is filtered by the timestamp
 /// column that represents "this became true" rather than "this row exists"
-/// (`confirmed_at`/`tested_at`/`discovered_at`), so an observation only
-/// 'suspected' (not yet confirmed) at that point in history is correctly
-/// absent from the replayed graph.
+/// (`tested_at`/`discovered_at`).
 pub async fn build_graph(
     pool: &PgPool,
     engagement_id: Uuid,
@@ -54,33 +42,6 @@ pub async fn build_graph(
     let credentials: Vec<CredRow> = sqlx::query_as(
         "SELECT id, username, domain FROM credentials
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
-    )
-    .bind(engagement_id)
-    .bind(as_of)
-    .fetch_all(pool)
-    .await?;
-
-    #[derive(sqlx::FromRow)]
-    struct ObsRow {
-        id: Uuid,
-        host_id: Uuid,
-        observation_type_id: Uuid,
-        key: String,
-        title: String,
-        status: String,
-        default_severity: String,
-        severity_override: Option<String>,
-    }
-    // In replay mode (as_of set), only observations confirmed by that point
-    // in history are included — see the confirmed_at note above.
-    let observations: Vec<ObsRow> = sqlx::query_as(
-        "SELECT o.id, o.host_id, o.observation_type_id, ot.key, ot.title,
-                o.status::text AS status, ot.default_severity, o.severity_override
-         FROM observations o
-         JOIN observation_types ot ON ot.id = o.observation_type_id
-         JOIN hosts h ON h.id = o.host_id
-         WHERE h.engagement_id = $1
-           AND ($2::timestamptz IS NULL OR (o.confirmed_at IS NOT NULL AND o.confirmed_at <= $2))",
     )
     .bind(engagement_id)
     .bind(as_of)
@@ -123,27 +84,8 @@ pub async fn build_graph(
     .fetch_all(pool)
     .await?;
 
-    #[derive(sqlx::FromRow)]
-    struct RuleRow {
-        id: Uuid,
-        trigger_observation_type_id: Uuid,
-        technique: String,
-        outcome: String,
-        next_step_md: String,
-        mitre_technique_id: Option<String>,
-    }
-    let rules: Vec<RuleRow> = sqlx::query_as(
-        "SELECT id, trigger_observation_type_id, technique, outcome, next_step_md, mitre_technique_id
-         FROM attack_path_rules WHERE enabled = TRUE",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let host_labels: HashMap<Uuid, &str> = hosts.iter().map(|h| (h.id, h.label.as_str())).collect();
-
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    let mut suggestions = Vec::new();
 
     for h in &hosts {
         nodes.push(json!({
@@ -160,70 +102,6 @@ pub async fn build_graph(
                 "domain": c.domain,
             }
         }));
-    }
-
-    for o in &observations {
-        let severity = o
-            .severity_override
-            .clone()
-            .unwrap_or_else(|| o.default_severity.clone());
-        let observation_node_id = format!("observation:{}", o.id);
-
-        nodes.push(json!({
-            "data": {
-                "id": observation_node_id,
-                "type": "observation",
-                "label": o.title,
-                "status": o.status,
-                "severity": severity,
-                "parent": format!("host:{}", o.host_id),
-            }
-        }));
-
-        if o.status == "confirmed" {
-            for rule in rules
-                .iter()
-                .filter(|r| r.trigger_observation_type_id == o.observation_type_id)
-            {
-                let technique_node_id = format!("technique:{}:{}", rule.id, o.id);
-                // The MITRE ID is folded directly into the node's label
-                // (not just carried as metadata) so it's visibly present on
-                // the rendered graph node, not only in the underlying data.
-                let label = match &rule.mitre_technique_id {
-                    Some(mitre_id) => format!("{} ({mitre_id})", rule.technique),
-                    None => rule.technique.clone(),
-                };
-                nodes.push(json!({
-                    "data": {
-                        "id": technique_node_id,
-                        "type": "technique",
-                        "label": label,
-                        "outcome": rule.outcome,
-                        "next_step_md": rule.next_step_md,
-                        "mitre_technique_id": rule.mitre_technique_id,
-                        "parent": observation_node_id,
-                    }
-                }));
-                edges.push(json!({
-                    "data": {
-                        "id": format!("edge:attack-path:{}:{}", rule.id, o.id),
-                        "source": observation_node_id,
-                        "target": technique_node_id,
-                        "type": "attack-path",
-                    }
-                }));
-
-                suggestions.push(json!({
-                    "host_id": format!("host:{}", o.host_id),
-                    "host_label": host_labels.get(&o.host_id).copied().unwrap_or(""),
-                    "observation_key": o.key,
-                    "observation_title": o.title,
-                    "technique": rule.technique,
-                    "outcome": rule.outcome,
-                    "next_step_md": rule.next_step_md,
-                }));
-            }
-        }
     }
 
     for t in &trusts {
@@ -250,5 +128,5 @@ pub async fn build_graph(
         }));
     }
 
-    Ok(json!({ "nodes": nodes, "edges": edges, "suggestions": suggestions }))
+    Ok(json!({ "nodes": nodes, "edges": edges }))
 }

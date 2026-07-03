@@ -14,7 +14,7 @@ use crate::routes::hosts::{get_or_create_tag, host_engagement_id};
 use crate::state::AppState;
 
 const VALID_KINDS: [&str; 5] = ["host", "checklist", "finding", "note", "engagement"];
-const VALID_SUBJECT_TYPES: [&str; 5] = ["engagement", "host", "finding", "observation", "credential"];
+const VALID_SUBJECT_TYPES: [&str; 4] = ["engagement", "host", "finding", "credential"];
 
 fn valid_kind(k: &str) -> bool {
     VALID_KINDS.contains(&k)

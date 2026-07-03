@@ -43,7 +43,6 @@ pub struct ChecklistStats {
 pub struct Dashboard {
     engagement: EngagementSummary,
     hosts_by_status: HashMap<String, i64>,
-    observations_by_status: HashMap<String, i64>,
     findings_by_severity: HashMap<String, i64>,
     checklist: ChecklistStats,
     credentials: CredentialStats,
@@ -95,16 +94,6 @@ async fn get_dashboard(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let hosts_by_status: HashMap<String, i64> = host_rows.into_iter().collect();
-
-    let obs_rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT o.status::text, COUNT(*) FROM observations o JOIN hosts h ON h.id = o.host_id
-         WHERE h.engagement_id = $1 GROUP BY o.status",
-    )
-    .bind(engagement_id)
-    .fetch_all(&state.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let observations_by_status: HashMap<String, i64> = obs_rows.into_iter().collect();
 
     let finding_rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT COALESCE(severity, 'none'), COUNT(*) FROM findings WHERE engagement_id = $1
@@ -184,7 +173,6 @@ async fn get_dashboard(
     Ok(Json(Dashboard {
         engagement,
         hosts_by_status,
-        observations_by_status,
         findings_by_severity,
         checklist,
         credentials,

@@ -10,7 +10,7 @@ use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
 
-const VALID_SUBJECT_TYPES: [&str; 5] = ["engagement", "host", "finding", "observation", "credential"];
+const VALID_SUBJECT_TYPES: [&str; 4] = ["engagement", "host", "finding", "credential"];
 
 fn valid_subject_type(s: &str) -> bool {
     VALID_SUBJECT_TYPES.contains(&s)

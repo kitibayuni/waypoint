@@ -47,7 +47,6 @@ pub struct Finding {
     poc_md: String,
     references_json: Value,
     status: String,
-    source_observation_id: Option<Uuid>,
     mitre_technique_ids: Value,
     created_at: DateTime<Utc>,
     #[sqlx(json)]
@@ -62,7 +61,7 @@ pub struct AffectedHost {
 
 const FINDING_SELECT: &str = "SELECT f.id, f.engagement_id, f.title, f.cve, f.cvss_vector,
     f.cvss_score::float8 AS cvss_score, f.severity, f.description_md, f.remediation_md, f.poc_md,
-    f.references_json, f.status::text AS status, f.source_observation_id, f.mitre_technique_ids, f.created_at,
+    f.references_json, f.status::text AS status, f.mitre_technique_ids, f.created_at,
     COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object('id', h.id, 'label', h.label)) FILTER (WHERE h.id IS NOT NULL),
         '[]'
@@ -88,7 +87,6 @@ pub struct FindingRequest {
     references_json: Value,
     #[serde(default = "default_status")]
     status: String,
-    source_observation_id: Option<Uuid>,
     #[serde(default)]
     mitre_technique_ids: Value,
     #[serde(default)]
@@ -141,8 +139,8 @@ async fn create_finding(
 
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO findings (engagement_id, title, cve, cvss_vector, cvss_score, severity,
-         description_md, remediation_md, poc_md, references_json, status, source_observation_id, mitre_technique_ids)
-         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12, $13)
+         description_md, remediation_md, poc_md, references_json, status, mitre_technique_ids)
+         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12)
          RETURNING id",
     )
     .bind(engagement_id)
@@ -156,7 +154,6 @@ async fn create_finding(
     .bind(&payload.poc_md)
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
-    .bind(payload.source_observation_id)
     .bind(normalize_refs(payload.mitre_technique_ids.clone()))
     .fetch_one(&mut *tx)
     .await
@@ -233,7 +230,7 @@ async fn update_finding(
     let result = sqlx::query(
         "UPDATE findings SET title = $1, cve = $2, cvss_vector = $3, cvss_score = $4::numeric,
          severity = $5, description_md = $6, remediation_md = $7, poc_md = $8, references_json = $9,
-         status = $10::finding_status, source_observation_id = $11, mitre_technique_ids = $12 WHERE id = $13",
+         status = $10::finding_status, mitre_technique_ids = $11 WHERE id = $12",
     )
     .bind(&payload.title)
     .bind(&payload.cve)
@@ -245,7 +242,6 @@ async fn update_finding(
     .bind(&payload.poc_md)
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
-    .bind(payload.source_observation_id)
     .bind(normalize_refs(payload.mitre_technique_ids.clone()))
     .bind(id)
     .execute(&mut *tx)

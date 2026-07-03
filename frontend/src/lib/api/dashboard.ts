@@ -28,7 +28,6 @@ export interface CredentialStats {
 export interface Dashboard {
 	engagement: EngagementSummary;
 	hosts_by_status: Record<string, number>;
-	observations_by_status: Record<string, number>;
 	findings_by_severity: Record<string, number>;
 	checklist: ChecklistStats;
 	credentials: CredentialStats;

@@ -5,7 +5,7 @@
 
 	const engagementId = $page.params.id as string;
 
-	const allTypes = ['notes', 'findings', 'observations', 'hosts', 'credentials', 'attachments'];
+	const allTypes = ['notes', 'findings', 'hosts', 'credentials', 'attachments'];
 
 	let query = $state('');
 	let selectedTypes = $state<string[]>([]);
@@ -56,7 +56,7 @@
 	<h1>Search</h1>
 
 	<form onsubmit={handleSearch} class="search-form">
-		<input bind:value={query} placeholder="Search notes, findings, observations, hosts…" required />
+		<input bind:value={query} placeholder="Search notes, findings, hosts…" required />
 		<button type="submit">Search</button>
 	</form>
 

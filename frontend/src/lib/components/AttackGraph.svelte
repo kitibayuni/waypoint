@@ -38,8 +38,6 @@
 				},
 				{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
 				{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
-				{ selector: 'node[type = "observation"]', style: { 'background-color': '#a03b3b' } },
-				{ selector: 'node[type = "technique"]', style: { 'background-color': '#6a3ba0' } },
 				{
 					selector: 'edge',
 					style: {
@@ -59,14 +57,6 @@
 					}
 				},
 				{
-					selector: 'edge[type = "attack-path"]',
-					style: {
-						'line-color': '#6a3ba0',
-						'target-arrow-color': '#6a3ba0',
-						'line-style': 'dashed'
-					}
-				},
-				{
 					selector: 'edge[type = "cred-reuse"]',
 					style: { 'line-color': '#a0663b', 'target-arrow-color': '#a0663b' }
 				},
@@ -81,8 +71,8 @@
 				fit: true,
 				padding: 40,
 				nodeDimensionsIncludeLabels: true,
-				componentSpacing: 150,
-				idealEdgeLength: () => 60,
+				componentSpacing: 100,
+				idealEdgeLength: () => 90,
 				edgeElasticity: () => 100,
 				gravity: 60,
 				numIter: 2000,

@@ -84,34 +84,6 @@ pub async fn search(
         }
     }
 
-    if want("observations") {
-        #[derive(sqlx::FromRow)]
-        struct Row {
-            id: Uuid,
-            title: String,
-            evidence_md: String,
-        }
-        let rows: Vec<Row> = sqlx::query_as(
-            "SELECT o.id, ot.title, o.evidence_md FROM observations o
-             JOIN observation_types ot ON ot.id = o.observation_type_id
-             JOIN hosts h ON h.id = o.host_id
-             WHERE h.engagement_id = $1 AND o.search_vector @@ websearch_to_tsquery('english', $2)
-             ORDER BY ts_rank(o.search_vector, websearch_to_tsquery('english', $2)) DESC LIMIT 25",
-        )
-        .bind(engagement_id)
-        .bind(query)
-        .fetch_all(pool)
-        .await?;
-        for r in rows {
-            results.push(SearchResult {
-                result_type: "observation".into(),
-                id: r.id,
-                title: r.title,
-                snippet: truncate(&r.evidence_md, 200),
-            });
-        }
-    }
-
     if want("hosts") {
         #[derive(sqlx::FromRow)]
         struct Row {

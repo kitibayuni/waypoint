@@ -18,7 +18,6 @@ export interface Finding {
 	poc_md: string;
 	references_json: unknown;
 	status: 'open' | 'triaged' | 'accepted_risk' | 'fixed';
-	source_observation_id: string | null;
 	mitre_technique_ids: string[];
 	created_at: string;
 	affected_hosts: AffectedHost[];
@@ -35,7 +34,6 @@ export interface FindingRequest {
 	poc_md?: string;
 	references_json?: unknown;
 	status?: string;
-	source_observation_id?: string | null;
 	mitre_technique_ids?: string[];
 	affected_host_ids?: string[];
 }
