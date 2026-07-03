@@ -50,12 +50,13 @@ pub struct Observation {
     evidence_md: String,
     created_by: Option<Uuid>,
     created_at: DateTime<Utc>,
+    confirmed_at: Option<DateTime<Utc>>,
 }
 
 const OBSERVATION_SELECT: &str = "SELECT o.id, o.host_id, o.service_id, o.observation_type_id,
     ot.key AS observation_key, ot.title AS observation_title, ot.category,
     ot.default_severity, o.severity_override, o.status::text AS status,
-    o.evidence_md, o.created_by, o.created_at
+    o.evidence_md, o.created_by, o.created_at, o.confirmed_at
     FROM observations o JOIN observation_types ot ON ot.id = o.observation_type_id";
 
 #[derive(Deserialize)]
@@ -157,7 +158,8 @@ async fn update_observation(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let result = sqlx::query(
-        "UPDATE observations SET status = $1::observation_status, evidence_md = $2, severity_override = $3
+        "UPDATE observations SET status = $1::observation_status, evidence_md = $2, severity_override = $3,
+             confirmed_at = CASE WHEN $1 = 'confirmed' AND confirmed_at IS NULL THEN now() ELSE confirmed_at END
          WHERE id = $4",
     )
     .bind(&payload.status)

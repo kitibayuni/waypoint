@@ -35,10 +35,11 @@ pub struct CredentialUsage {
     result: String,
     privilege: Option<String>,
     created_at: DateTime<Utc>,
+    tested_at: Option<DateTime<Utc>>,
 }
 
 const USAGE_SELECT: &str = "SELECT cu.id, cu.credential_id, cu.host_id, h.label AS host_label,
-    cu.service_id, cu.result::text AS result, cu.privilege::text AS privilege, cu.created_at
+    cu.service_id, cu.result::text AS result, cu.privilege::text AS privilege, cu.created_at, cu.tested_at
     FROM credential_usage cu JOIN hosts h ON h.id = cu.host_id";
 
 #[derive(Deserialize)]
@@ -94,8 +95,9 @@ async fn create_usage(
     }
 
     let (id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO credential_usage (credential_id, host_id, service_id, result, privilege)
-         VALUES ($1, $2, $3, $4::credential_usage_result, $5::credential_privilege)
+        "INSERT INTO credential_usage (credential_id, host_id, service_id, result, privilege, tested_at)
+         VALUES ($1, $2, $3, $4::credential_usage_result, $5::credential_privilege,
+                 CASE WHEN $4 <> 'untested' THEN now() ELSE NULL END)
          RETURNING id",
     )
     .bind(credential_id)
@@ -135,7 +137,9 @@ async fn update_usage(
     }
 
     let result = sqlx::query(
-        "UPDATE credential_usage SET result = $1::credential_usage_result, privilege = $2::credential_privilege WHERE id = $3",
+        "UPDATE credential_usage SET result = $1::credential_usage_result, privilege = $2::credential_privilege,
+             tested_at = CASE WHEN $1 <> 'untested' THEN now() ELSE tested_at END
+         WHERE id = $3",
     )
     .bind(&payload.result)
     .bind(&payload.privilege)
