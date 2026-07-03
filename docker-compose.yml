@@ -23,6 +23,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       CRED_ENC_KEY: ${CRED_ENC_KEY}
       BACKEND_PORT: ${BACKEND_PORT}
+      ATTACHMENTS_DIR: /app/data/attachments
+    volumes:
+      - attachments_data:/app/data/attachments
     depends_on:
       db:
         condition: service_healthy
@@ -46,3 +49,4 @@ services:
 
 volumes:
   db_data:
+  attachments_data:
