@@ -34,7 +34,18 @@ async fn main() {
     let cred_enc_key = std::env::var("CRED_ENC_KEY").expect("CRED_ENC_KEY must be set");
     let cred_cipher = Arc::new(CredentialCipher::from_env_key(&cred_enc_key));
 
-    let state = AppState { pool, cred_cipher };
+    let attachments_dir: std::path::PathBuf = std::env::var("ATTACHMENTS_DIR")
+        .unwrap_or_else(|_| "./data/attachments".into())
+        .into();
+    tokio::fs::create_dir_all(&attachments_dir)
+        .await
+        .expect("failed to create attachments directory");
+
+    let state = AppState {
+        pool,
+        cred_cipher,
+        attachments_dir,
+    };
 
     let public_routes = Router::new()
         .route("/healthz", get(healthz))
