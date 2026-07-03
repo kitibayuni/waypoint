@@ -47,9 +47,18 @@ async fn main() {
         attachments_dir,
     };
 
+    let login_limiter = auth::rate_limit::LoginRateLimiter::new();
+    let login_route = Router::new()
+        .route("/auth/login", post(auth::routes::login))
+        .layer(middleware::from_fn(move |req, next| {
+            let limiter = login_limiter.clone();
+            async move { auth::rate_limit::rate_limit_login(limiter, req, next).await }
+        }))
+        .with_state(state.clone());
+
     let public_routes = Router::new()
         .route("/healthz", get(healthz))
-        .route("/auth/login", post(auth::routes::login));
+        .merge(login_route);
 
     let protected_routes = Router::new()
         .route("/auth/logout", post(auth::routes::logout))
