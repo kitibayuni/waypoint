@@ -134,6 +134,7 @@
 		<p><a href={`/engagements/${engagementId}/templates`}>View templates &rarr;</a></p>
 		<p><a href={`/engagements/${engagementId}/findings`}>View findings &rarr;</a></p>
 		<p><a href={`/engagements/${engagementId}/search`}>Search &rarr;</a></p>
+		<p><a href={`/engagements/${engagementId}/import`}>Import scan results &rarr;</a></p>
 		<p>
 			<a href={`/api/reports/${engagementId}`} target="_blank" rel="noopener">Preview report</a>
 			&middot;
