@@ -21,6 +21,7 @@ export interface Host {
 	criticality: string | null;
 	status: 'discovered' | 'enumerating' | 'exploited' | 'owned' | 'cleared';
 	general_info_md: string;
+	login_notes_md: string;
 	created_at: string;
 	addresses: HostAddress[];
 	tags: HostTag[];
@@ -46,6 +47,7 @@ export interface UpdateHostRequest {
 	criticality: string | null;
 	status: string;
 	general_info_md: string;
+	login_notes_md: string;
 }
 
 export interface Tag {

@@ -7,11 +7,18 @@
 		addAddress,
 		removeAddress,
 		addTag,
-		removeTag
+		removeTag,
+		listHosts
 	} from '$lib/api/hosts';
 	import type { Host } from '$lib/api/hosts';
 	import { listServices, createService, deleteService, SERVICE_NAMES } from '$lib/api/services';
 	import type { Service } from '$lib/api/services';
+	import {
+		listTrustRelationships,
+		createTrustRelationship,
+		deleteTrustRelationship
+	} from '$lib/api/trust_relationships';
+	import type { TrustRelationship } from '$lib/api/trust_relationships';
 	import {
 		listObservationTypes,
 		listObservations,
@@ -39,7 +46,7 @@
 	let loading = $state(true);
 	let error = $state('');
 	let activeTab = $state<
-		'general' | 'services' | 'observations' | 'checklists' | 'notes' | 'attachments'
+		'general' | 'access' | 'services' | 'observations' | 'checklists' | 'notes' | 'attachments'
 	>('general');
 
 	let labelDraft = $state('');
@@ -49,6 +56,15 @@
 	let criticalityDraft = $state('');
 	let statusDraft = $state('discovered');
 	let notesDraft = $state('');
+	let loginNotesDraft = $state('');
+
+	let allHosts = $state<Host[]>([]);
+	let allTrust = $state<TrustRelationship[]>([]);
+	let incomingAccess = $derived(allTrust.filter((t) => t.to_host_id === hostId));
+	let accessDirection = $state<'from' | 'to'>('from');
+	let accessOtherHostId = $state('');
+	let accessKind = $state('session');
+	let accessNote = $state('');
 
 	let newIp = $state('');
 	let newTagName = $state('');
@@ -76,14 +92,16 @@
 		loading = true;
 		error = '';
 		try {
-			const [h, svc, obsTypes, obs, cls, hostNotes, hostAttachments] = await Promise.all([
+			const [h, svc, obsTypes, obs, cls, hostNotes, hostAttachments, hosts, trust] = await Promise.all([
 				getHost(hostId),
 				listServices(hostId),
 				listObservationTypes(),
 				listObservations(hostId),
 				listHostChecklists(hostId),
 				listNotes(engagementId, 'host', hostId),
-				listAttachments(engagementId, 'host', hostId)
+				listAttachments(engagementId, 'host', hostId),
+				listHosts(engagementId),
+				listTrustRelationships(engagementId)
 			]);
 			host = h;
 			services = svc;
@@ -92,6 +110,8 @@
 			checklists = cls;
 			notes = hostNotes;
 			attachments = hostAttachments;
+			allHosts = hosts;
+			allTrust = trust;
 			labelDraft = h.label;
 			hostnameDraft = h.hostname ?? '';
 			osDraft = h.os ?? '';
@@ -99,6 +119,7 @@
 			criticalityDraft = h.criticality ?? '';
 			statusDraft = h.status;
 			notesDraft = h.general_info_md;
+			loginNotesDraft = h.login_notes_md;
 		} catch {
 			error = 'Failed to load host.';
 		} finally {
@@ -117,11 +138,57 @@
 				os_family: osFamilyDraft || null,
 				criticality: criticalityDraft || null,
 				status: statusDraft,
-				general_info_md: notesDraft
+				general_info_md: notesDraft,
+				login_notes_md: loginNotesDraft
 			});
 			error = '';
 		} catch {
 			error = 'Failed to save host.';
+		}
+	}
+
+	async function saveLoginNotes() {
+		try {
+			host = await updateHost(hostId, {
+				label: labelDraft,
+				hostname: hostnameDraft || null,
+				os: osDraft || null,
+				os_family: osFamilyDraft || null,
+				criticality: criticalityDraft || null,
+				status: statusDraft,
+				general_info_md: notesDraft,
+				login_notes_md: loginNotesDraft
+			});
+			error = '';
+		} catch {
+			error = 'Failed to save login procedure notes.';
+		}
+	}
+
+	async function handleLogAccess(e: SubmitEvent) {
+		e.preventDefault();
+		if (!accessOtherHostId) return;
+		try {
+			const payload =
+				accessDirection === 'from'
+					? { from_host_id: accessOtherHostId, to_host_id: hostId, kind: accessKind, note: accessNote || null }
+					: { from_host_id: hostId, to_host_id: accessOtherHostId, kind: accessKind, note: accessNote || null };
+			await createTrustRelationship(engagementId, payload);
+			allTrust = await listTrustRelationships(engagementId);
+			accessOtherHostId = '';
+			accessNote = '';
+			error = '';
+		} catch {
+			error = 'Failed to log access.';
+		}
+	}
+
+	async function handleRemoveAccess(id: string) {
+		try {
+			await deleteTrustRelationship(id);
+			allTrust = allTrust.filter((t) => t.id !== id);
+		} catch {
+			error = 'Failed to remove access entry.';
 		}
 	}
 
@@ -272,6 +339,9 @@
 			<button class:active={activeTab === 'general'} onclick={() => (activeTab = 'general')}>
 				General
 			</button>
+			<button class:active={activeTab === 'access'} onclick={() => (activeTab = 'access')}>
+				Access ({incomingAccess.length})
+			</button>
 			<button class:active={activeTab === 'services'} onclick={() => (activeTab = 'services')}>
 				Services ({services.length})
 			</button>
@@ -359,6 +429,55 @@
 					<input bind:value={newTagName} placeholder="new-tag" />
 					<button onclick={handleAddTag}>Add</button>
 				</div>
+			</section>
+		{:else if activeTab === 'access'}
+			<section>
+				<h2>Accessible from</h2>
+				{#if incomingAccess.length === 0}
+					<p class="muted">
+						No recorded access to this host yet — log how you got in below, or log it as a
+						pivot target from another host's Access tab.
+					</p>
+				{:else}
+					<ul class="access-list">
+						{#each incomingAccess as t (t.id)}
+							<li>
+								Accessible from
+								<a href={`/engagements/${engagementId}/hosts/${t.from_host_id}`}>{t.from_host_label}</a>
+								<span class="muted">({t.kind}){t.note ? ` — ${t.note}` : ''}</span>
+								<button onclick={() => handleRemoveAccess(t.id)}>&times;</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+
+				<h3>Log access</h3>
+				<form onsubmit={handleLogAccess} class="inline-form">
+					<select bind:value={accessDirection}>
+						<option value="from">This host is accessible from…</option>
+						<option value="to">This host has access to…</option>
+					</select>
+					<select bind:value={accessOtherHostId}>
+						<option value="" disabled selected>Other host…</option>
+						{#each allHosts.filter((h) => h.id !== hostId) as h (h.id)}
+							<option value={h.id}>{h.label}</option>
+						{/each}
+					</select>
+					<select bind:value={accessKind}>
+						<option value="domain_trust">domain trust</option>
+						<option value="admin_of">admin of</option>
+						<option value="shares_creds">shares creds</option>
+						<option value="session">session</option>
+					</select>
+					<input bind:value={accessNote} placeholder="note (optional)" />
+					<button type="submit">Log</button>
+				</form>
+
+				<h2>Login procedure notes</h2>
+				<label>
+					<textarea bind:value={loginNotesDraft} rows="8"></textarea>
+				</label>
+				<button onclick={saveLoginNotes}>Save</button>
 			</section>
 		{:else if activeTab === 'services'}
 			<section>
@@ -586,5 +705,25 @@
 	}
 	.muted {
 		color: #777;
+	}
+	.access-list {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.access-list li {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.access-list button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
 	}
 </style>
