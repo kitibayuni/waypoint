@@ -51,10 +51,12 @@ pub async fn login(
 
     let max_age =
         CookieDuration::seconds((session.expires_at - chrono::Utc::now()).num_seconds().max(0));
+    // Strict is sufficient CSRF protection here (no cross-site login flows to support)
+    // and avoids needing a separate CSRF token scheme.
     let cookie = Cookie::build((SESSION_COOKIE, session.raw_token))
         .http_only(true)
         .secure(true)
-        .same_site(SameSite::Lax)
+        .same_site(SameSite::Strict)
         .path("/")
         .max_age(max_age)
         .build();
