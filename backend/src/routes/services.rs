@@ -28,12 +28,12 @@ fn default_protocol() -> String {
 }
 
 // Controlled service-type list driving the frontend dropdown; kept in sync with
-// `service_checklist_templates` (0014_service_rework.sql), which maps a subset of
-// these to a starter checklist template. Not every value here has a mapping -- that's
-// fine, the auto-checklist trigger is a no-op when none exists.
-const VALID_SERVICE_NAMES: [&str; 16] = [
+// `service_checklist_templates` (0014/0016_*.sql), which maps every value except
+// "other" to a starter checklist template grounded in the operator's own notes.
+const VALID_SERVICE_NAMES: [&str; 24] = [
     "ssh", "ftp", "telnet", "smb", "http", "https", "rdp", "winrm", "mssql", "mysql",
-    "postgresql", "ldap", "dns", "snmp", "vnc", "other",
+    "postgresql", "ldap", "dns", "snmp", "vnc", "nfs", "smtp", "pop3", "imap", "rsync",
+    "oracle", "ipmi", "rsh", "other",
 ];
 
 fn valid_service_name(n: &str) -> bool {

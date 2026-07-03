@@ -16,6 +16,14 @@ export const SERVICE_NAMES = [
 	'dns',
 	'snmp',
 	'vnc',
+	'nfs',
+	'smtp',
+	'pop3',
+	'imap',
+	'rsync',
+	'oracle',
+	'ipmi',
+	'rsh',
 	'other'
 ] as const;
 
