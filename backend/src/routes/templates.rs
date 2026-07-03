@@ -356,13 +356,32 @@ async fn instantiate_checklist(
 
     let checklist_engagement_id = if host_id.is_some() { None } else { Some(engagement_id) };
 
+    let checklist_id =
+        insert_checklist_from_template(tx, host_id, checklist_engagement_id, &name, template_id, body)
+            .await?;
+
+    Ok((checklist_id, engagement_id))
+}
+
+/// Shared checklist-instantiation core: inserts one `checklists` row + its
+/// `checklist_items` from a template payload's `items` array. Used both by the
+/// explicit "instantiate template" flow above and by the automatic
+/// service-type -> checklist trigger in `routes::services`.
+pub(crate) async fn insert_checklist_from_template(
+    tx: &mut Transaction<'_, Postgres>,
+    host_id: Option<Uuid>,
+    checklist_engagement_id: Option<Uuid>,
+    name: &str,
+    template_id: Uuid,
+    body: &Value,
+) -> Result<Uuid, StatusCode> {
     let (checklist_id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO checklists (host_id, engagement_id, name, template_origin_id)
          VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(host_id)
     .bind(checklist_engagement_id)
-    .bind(&name)
+    .bind(name)
     .bind(template_id)
     .fetch_one(&mut **tx)
     .await
@@ -380,7 +399,7 @@ async fn instantiate_checklist(
         }
     }
 
-    Ok((checklist_id, engagement_id))
+    Ok(checklist_id)
 }
 
 async fn instantiate_finding(

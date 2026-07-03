@@ -1,12 +1,31 @@
 import { apiDelete, apiGet, apiSend } from './http';
 
+export const SERVICE_NAMES = [
+	'ssh',
+	'ftp',
+	'telnet',
+	'smb',
+	'http',
+	'https',
+	'rdp',
+	'winrm',
+	'mssql',
+	'mysql',
+	'postgresql',
+	'ldap',
+	'dns',
+	'snmp',
+	'vnc',
+	'other'
+] as const;
+
 export interface Service {
 	id: string;
 	host_id: string;
 	port: number;
 	protocol: 'tcp' | 'udp';
 	name: string | null;
-	product: string | null;
+	display_name: string | null;
 	version: string | null;
 	banner: string | null;
 	state: string | null;
@@ -17,7 +36,7 @@ export interface ServiceRequest {
 	port: number;
 	protocol?: string;
 	name?: string | null;
-	product?: string | null;
+	display_name?: string | null;
 	version?: string | null;
 	banner?: string | null;
 	state?: string | null;

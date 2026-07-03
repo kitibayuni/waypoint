@@ -15,3 +15,6 @@ prod-certs/
 # OS / editor
 .DS_Store
 *.swp
+
+# Notes
+ADJUSTMENTS.txt

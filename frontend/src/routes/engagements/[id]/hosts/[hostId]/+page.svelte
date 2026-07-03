@@ -10,7 +10,7 @@
 		removeTag
 	} from '$lib/api/hosts';
 	import type { Host } from '$lib/api/hosts';
-	import { listServices, createService, deleteService } from '$lib/api/services';
+	import { listServices, createService, deleteService, SERVICE_NAMES } from '$lib/api/services';
 	import type { Service } from '$lib/api/services';
 	import {
 		listObservationTypes,
@@ -56,7 +56,7 @@
 	let newPort = $state<number | ''>('');
 	let newProtocol = $state('tcp');
 	let newServiceName = $state('');
-	let newProduct = $state('');
+	let newDisplayName = $state('');
 	let newVersion = $state('');
 
 	let observationTypes = $state<ObservationType[]>([]);
@@ -177,15 +177,17 @@
 				port: Number(newPort),
 				protocol: newProtocol,
 				name: newServiceName || null,
-				product: newProduct || null,
+				display_name: newDisplayName || null,
 				version: newVersion || null
 			});
 			services = [...services, service];
 			newPort = '';
 			newServiceName = '';
-			newProduct = '';
+			newDisplayName = '';
 			newVersion = '';
 			error = '';
+			// A matching service type may have auto-instantiated a checklist.
+			checklists = await listHostChecklists(hostId);
 		} catch {
 			error = 'Failed to add service.';
 		}
@@ -365,8 +367,8 @@
 						<tr>
 							<th>Port</th>
 							<th>Proto</th>
-							<th>Name</th>
-							<th>Product</th>
+							<th>Service</th>
+							<th>Display name</th>
 							<th>Version</th>
 							<th></th>
 						</tr>
@@ -377,7 +379,7 @@
 								<td>{service.port}</td>
 								<td>{service.protocol}</td>
 								<td>{service.name ?? ''}</td>
-								<td>{service.product ?? ''}</td>
+								<td>{service.display_name ?? ''}</td>
 								<td>{service.version ?? ''}</td>
 								<td><button onclick={() => handleDeleteService(service.id)}>Remove</button></td>
 							</tr>
@@ -390,8 +392,13 @@
 						<option value="tcp">tcp</option>
 						<option value="udp">udp</option>
 					</select>
-					<input bind:value={newServiceName} placeholder="name (e.g. smb)" />
-					<input bind:value={newProduct} placeholder="product" />
+					<select bind:value={newServiceName}>
+						<option value="" disabled selected>Service…</option>
+						{#each SERVICE_NAMES as svc (svc)}
+							<option value={svc}>{svc}</option>
+						{/each}
+					</select>
+					<input bind:value={newDisplayName} placeholder="display name (optional)" />
 					<input bind:value={newVersion} placeholder="version" />
 					<button type="submit">Add service</button>
 				</form>
