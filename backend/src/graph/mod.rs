@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -17,7 +18,18 @@ use uuid::Uuid;
 /// existing signal for "the trigger genuinely exists", and observations
 /// already moved to 'remediated' or 'false_positive' no longer suggest a
 /// live path (§4.9: "whose outcome isn't yet achieved").
-pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sqlx::Error> {
+///
+/// `as_of`, when set, replays the graph as it looked at that moment
+/// (DESIGN.md §8.2): every contributing query is filtered by the timestamp
+/// column that represents "this became true" rather than "this row exists"
+/// (`confirmed_at`/`tested_at`/`discovered_at`), so an observation only
+/// 'suspected' (not yet confirmed) at that point in history is correctly
+/// absent from the replayed graph.
+pub async fn build_graph(
+    pool: &PgPool,
+    engagement_id: Uuid,
+    as_of: Option<DateTime<Utc>>,
+) -> Result<Value, sqlx::Error> {
     #[derive(sqlx::FromRow)]
     struct HostRow {
         id: Uuid,
@@ -25,9 +37,11 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
         status: String,
     }
     let hosts: Vec<HostRow> = sqlx::query_as(
-        "SELECT id, label, status::text AS status FROM hosts WHERE engagement_id = $1",
+        "SELECT id, label, status::text AS status FROM hosts
+         WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
     )
     .bind(engagement_id)
+    .bind(as_of)
     .fetch_all(pool)
     .await?;
 
@@ -38,9 +52,11 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
         domain: Option<String>,
     }
     let credentials: Vec<CredRow> = sqlx::query_as(
-        "SELECT id, username, domain FROM credentials WHERE engagement_id = $1",
+        "SELECT id, username, domain FROM credentials
+         WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
     )
     .bind(engagement_id)
+    .bind(as_of)
     .fetch_all(pool)
     .await?;
 
@@ -55,15 +71,19 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
         default_severity: String,
         severity_override: Option<String>,
     }
+    // In replay mode (as_of set), only observations confirmed by that point
+    // in history are included — see the confirmed_at note above.
     let observations: Vec<ObsRow> = sqlx::query_as(
         "SELECT o.id, o.host_id, o.observation_type_id, ot.key, ot.title,
                 o.status::text AS status, ot.default_severity, o.severity_override
          FROM observations o
          JOIN observation_types ot ON ot.id = o.observation_type_id
          JOIN hosts h ON h.id = o.host_id
-         WHERE h.engagement_id = $1",
+         WHERE h.engagement_id = $1
+           AND ($2::timestamptz IS NULL OR (o.confirmed_at IS NOT NULL AND o.confirmed_at <= $2))",
     )
     .bind(engagement_id)
+    .bind(as_of)
     .fetch_all(pool)
     .await?;
 
@@ -76,9 +96,11 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
     }
     let trusts: Vec<TrustRow> = sqlx::query_as(
         "SELECT id, from_host_id, to_host_id, kind::text AS kind
-         FROM trust_relationships WHERE engagement_id = $1",
+         FROM trust_relationships
+         WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR discovered_at <= $2)",
     )
     .bind(engagement_id)
+    .bind(as_of)
     .fetch_all(pool)
     .await?;
 
@@ -93,9 +115,11 @@ pub async fn build_graph(pool: &PgPool, engagement_id: Uuid) -> Result<Value, sq
         "SELECT cu.id, cu.credential_id, cu.host_id, cu.privilege::text AS privilege
          FROM credential_usage cu
          JOIN credentials c ON c.id = cu.credential_id
-         WHERE c.engagement_id = $1 AND cu.result = 'works'",
+         WHERE c.engagement_id = $1 AND cu.result = 'works'
+           AND ($2::timestamptz IS NULL OR (cu.tested_at IS NOT NULL AND cu.tested_at <= $2))",
     )
     .bind(engagement_id)
+    .bind(as_of)
     .fetch_all(pool)
     .await?;
 
