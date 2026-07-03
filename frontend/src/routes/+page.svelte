@@ -13,6 +13,9 @@
 		<h1>Engagement Manager</h1>
 		<p>Signed in as {$currentUser.display_name} ({$currentUser.email})</p>
 		<p><a href="/engagements">View engagements &rarr;</a></p>
+		{#if $currentUser.is_admin}
+			<p><a href="/admin/audit">Audit log &rarr;</a></p>
+		{/if}
 		<button onclick={handleLogout}>Sign out</button>
 	{/if}
 </main>
