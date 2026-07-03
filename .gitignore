@@ -10,9 +10,7 @@
 
 # Env / secrets
 .env
-nginx/certs/*.key
-nginx/certs/*.pem
-nginx/certs/*.crt
+prod-certs/
 
 # OS / editor
 .DS_Store
