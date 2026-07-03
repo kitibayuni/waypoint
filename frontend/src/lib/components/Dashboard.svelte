@@ -70,7 +70,7 @@
 					{ selector: 'node[type = "technique"]', style: { 'background-color': '#6a3ba0' } },
 					{
 						selector: 'edge',
-						style: { width: 1, 'line-color': '#5a6270', 'curve-style': 'bezier' }
+						style: { width: 1, color: '#fff', 'line-color': '#5a6270', 'curve-style': 'bezier' }
 					}
 				],
 				layout: { name: 'cose', animate: false },

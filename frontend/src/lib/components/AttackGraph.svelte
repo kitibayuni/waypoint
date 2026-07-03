@@ -42,6 +42,7 @@
 					selector: 'edge',
 					style: {
 						label: 'data(label)',
+						color: '#fff',
 						'font-size': '8px',
 						width: 2,
 						'line-color': '#bbb',
