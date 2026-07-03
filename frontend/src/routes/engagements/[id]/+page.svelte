@@ -7,6 +7,7 @@
 	import type { ScopeItem } from '$lib/api/scope';
 	import { listMembers, addMember, updateMemberRole, removeMember } from '$lib/api/members';
 	import type { Member } from '$lib/api/members';
+	import Dashboard from '$lib/components/Dashboard.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -137,6 +138,8 @@
 		{#if error}
 			<p class="error">{error}</p>
 		{/if}
+
+		<Dashboard {engagementId} />
 
 		<section>
 			<h2>Global notes</h2>
