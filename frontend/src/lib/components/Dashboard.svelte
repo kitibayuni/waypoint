@@ -67,7 +67,13 @@
 					{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
 					{
 						selector: 'edge',
-						style: { width: 1, color: '#fff', 'line-color': '#5a6270', 'curve-style': 'bezier' }
+						style: {
+							width: 1,
+							color: '#fff',
+							'line-color': '#5a6270',
+							'curve-style': 'bezier',
+							'control-point-step-size': 40
+						}
 					}
 				],
 				layout: {

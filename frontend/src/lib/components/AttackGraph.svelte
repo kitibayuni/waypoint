@@ -53,7 +53,8 @@
 						'line-color': '#bbb',
 						'target-arrow-color': '#bbb',
 						'target-arrow-shape': 'triangle',
-						'curve-style': 'bezier'
+						'curve-style': 'bezier',
+						'control-point-step-size': 60
 					}
 				},
 				{
@@ -72,10 +73,11 @@
 				padding: 40,
 				nodeDimensionsIncludeLabels: true,
 				componentSpacing: 100,
+				nodeRepulsion: () => 12000,
 				idealEdgeLength: () => 90,
-				edgeElasticity: () => 100,
-				gravity: 60,
-				numIter: 2000,
+				edgeElasticity: () => 200,
+				gravity: 30,
+				numIter: 3000,
 				nodeOverlap: 20
 			}
 		});
