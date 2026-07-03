@@ -1,4 +1,5 @@
 pub mod attachments;
+pub mod audit;
 pub mod checklists;
 pub mod clients;
 pub mod credential_usage;
@@ -10,6 +11,7 @@ pub mod graph;
 pub mod hosts;
 pub mod import;
 pub mod members;
+pub mod mitre;
 pub mod notes;
 pub mod observation_types;
 pub mod observations;
@@ -47,4 +49,6 @@ pub fn router() -> Router<AppState> {
         .merge(dashboard::router())
         .merge(reports::router())
         .merge(import::router())
+        .merge(audit::router())
+        .merge(mitre::router())
 }
