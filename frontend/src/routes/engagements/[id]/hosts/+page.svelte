@@ -16,6 +16,7 @@
 	let loading = $state(true);
 	let error = $state('');
 
+	let showNewHostForm = $state(false);
 	let newLabel = $state('');
 	let newHostname = $state('');
 	let newOs = $state('');
@@ -68,6 +69,7 @@
 			newOs = '';
 			newAddresses = '';
 			newTags = '';
+			showNewHostForm = false;
 			error = '';
 			await load();
 		} catch {
@@ -85,30 +87,37 @@
 		<p class="error">{error}</p>
 	{/if}
 
-	<form onsubmit={handleCreate}>
-		<h2>New host</h2>
-		<label>
-			Label
-			<input bind:value={newLabel} required placeholder="e.g. DC01" />
-		</label>
-		<label>
-			Hostname
-			<input bind:value={newHostname} placeholder="e.g. dc01.corp.local" />
-		</label>
-		<label>
-			OS
-			<input bind:value={newOs} placeholder="e.g. Windows Server 2019" />
-		</label>
-		<label>
-			IP addresses (comma-separated)
-			<input bind:value={newAddresses} placeholder="10.10.10.5, 10.10.10.6" />
-		</label>
-		<label>
-			Tags (comma-separated)
-			<input bind:value={newTags} placeholder="domain-controller, critical" />
-		</label>
-		<button type="submit">Add host</button>
-	</form>
+	<button type="button" class="toggle-form" onclick={() => (showNewHostForm = !showNewHostForm)}>
+		{showNewHostForm ? 'Cancel' : '+ New host'}
+	</button>
+
+	{#if showNewHostForm}
+		<form onsubmit={handleCreate} class="new-host-form">
+			<div class="grid">
+				<label>
+					Label
+					<input bind:value={newLabel} required placeholder="e.g. DC01" />
+				</label>
+				<label>
+					Hostname
+					<input bind:value={newHostname} placeholder="e.g. dc01.corp.local" />
+				</label>
+				<label>
+					OS
+					<input bind:value={newOs} placeholder="e.g. Windows Server 2019" />
+				</label>
+				<label>
+					IP addresses (comma-separated)
+					<input bind:value={newAddresses} placeholder="10.10.10.5, 10.10.10.6" />
+				</label>
+				<label>
+					Tags (comma-separated)
+					<input bind:value={newTags} placeholder="domain-controller, critical" />
+				</label>
+			</div>
+			<button type="submit">Add host</button>
+		</form>
+	{/if}
 
 	<div class="layout">
 		{#if loading}
@@ -138,12 +147,22 @@
 	.muted {
 		color: var(--text-muted);
 	}
-	form {
+	.toggle-form {
+		margin-bottom: 0.75rem;
+	}
+	.new-host-form {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		max-width: 24rem;
 		margin-bottom: 1.5rem;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.75rem;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+		gap: 0.5rem;
 	}
 	label {
 		display: flex;
