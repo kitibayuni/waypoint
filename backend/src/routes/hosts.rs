@@ -340,6 +340,13 @@ async fn delete_host(
         return Err(StatusCode::NOT_FOUND);
     }
 
+    sqlx::query("DELETE FROM node_positions WHERE engagement_id = $1 AND node_id = $2")
+        .bind(engagement_id)
+        .bind(format!("host:{id}"))
+        .execute(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     log_action(&state.pool, user.id, "delete", "host", id, Some(&before), None::<&Host>).await;
 
     Ok(StatusCode::NO_CONTENT)
