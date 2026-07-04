@@ -2,33 +2,46 @@
 	import { onDestroy } from 'svelte';
 	import cytoscape from 'cytoscape';
 	import type { Core, ElementDefinition } from 'cytoscape';
+	import { listNodePositions, putNodePositions } from '$lib/api/node_positions';
 
 	let {
 		elements,
 		onHostDblClick,
+		onNodeSelect,
 		compact = false,
-		interactive = true
+		interactive = true,
+		positions
 	}: {
 		elements: ElementDefinition[];
 		onHostDblClick?: (hostId: string) => void;
+		/** Fires on single-click/tap of a node, and with `null` when the selection is cleared. */
+		onNodeSelect?: (
+			info: { id: string; type: string; data: Record<string, unknown> } | null
+		) => void;
 		/** Smaller fonts/padding and tighter layout spacing, for the Dashboard mini-graph panel. */
 		compact?: boolean;
 		/** Set false to disable zoom/pan/box-selection, e.g. for a read-only overview panel. */
 		interactive?: boolean;
+		/**
+		 * Enables shared, stable node positions for this engagement instead of a fresh
+		 * randomized layout every time `elements` changes -- see `rebuild()`. Pass
+		 * `persist: true` only from the pages that should be allowed to write dragged/
+		 * newly-placed positions back (the root Attack Graph page and the Hosts map);
+		 * Replay and the Dashboard mini-graph read the same shared layout but never
+		 * write to it.
+		 */
+		positions?: { engagementId: string; persist?: boolean };
 	} = $props();
 
 	let container: HTMLDivElement;
 	let cy: Core | null = null;
 
-	// The Dashboard mini-graph and the full-size attack graph/Hosts-map/Replay
-	// views share one visual language (node/edge colors, the foothold
-	// highlight) but need different scale and layout tightness for their very
-	// different container sizes -- `compact` switches between the two
-	// tunings here instead of each consumer hand-duplicating this whole
-	// style+layout block (which is what happened before this was factored out).
-	// cytoscape's style-array type doesn't unify well across conditionally
-	// different-shaped rule objects (compact vs. full edge styling); the
-	// object shapes themselves are still exactly what cytoscape expects.
+	let savedPositions: Record<string, { x: number; y: number }> = {};
+	let positionsLoadedFor = '';
+	let selectedId: string | null = null;
+	let pendingChanges: Record<string, { x: number; y: number }> = {};
+	let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
 	function buildStyle(): any[] {
 		const styles: any[] = [
 			{
@@ -50,6 +63,12 @@
 			{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
 			{ selector: 'node[type = "host"][?is_foothold]', style: { 'background-color': '#e04343' } },
 			{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
+			// Border rather than background, since background already encodes
+			// host/credential/foothold identity -- matches the --warning design token.
+			{
+				selector: 'node.selected',
+				style: { 'border-width': 3, 'border-style': 'solid', 'border-color': '#e0b23f' }
+			},
 			compact
 				? {
 						selector: 'edge',
@@ -98,12 +117,13 @@
 		return styles;
 	}
 
-	function buildLayout() {
+	function buildLayout(randomize: boolean) {
 		return compact
 			? {
 					name: 'cose' as const,
 					animate: false,
 					fit: true,
+					randomize,
 					padding: 20,
 					nodeDimensionsIncludeLabels: true,
 					componentSpacing: 80,
@@ -117,6 +137,7 @@
 					name: 'cose' as const,
 					animate: false,
 					fit: true,
+					randomize,
 					padding: 40,
 					nodeDimensionsIncludeLabels: true,
 					componentSpacing: 100,
@@ -129,48 +150,222 @@
 				};
 	}
 
-	function rebuild() {
-		cy?.destroy();
-		cy = cytoscape({
-			container,
-			elements,
-			style: buildStyle(),
-			layout: buildLayout(),
-			userZoomingEnabled: interactive,
-			userPanningEnabled: interactive,
-			boxSelectionEnabled: interactive
-		});
+	function commitPosition(id: string, pos: { x: number; y: number }) {
+		savedPositions = { ...savedPositions, [id]: pos };
+		if (positions?.persist && positions.engagementId) queuePersist(id, pos);
+	}
 
-		cy.on('dbltap', 'node[type = "host"]', (evt) => {
-			const id = evt.target.id() as string;
-			onHostDblClick?.(id.replace(/^host:/, ''));
+	function queuePersist(nodeId: string, pos: { x: number; y: number }) {
+		pendingChanges[nodeId] = pos;
+		if (flushTimer) clearTimeout(flushTimer);
+		flushTimer = setTimeout(flush, 600);
+	}
+
+	function flush() {
+		flushTimer = null;
+		const engId = positions?.engagementId;
+		const changes = pendingChanges;
+		pendingChanges = {};
+		if (!engId || Object.keys(changes).length === 0) return;
+		putNodePositions(
+			engId,
+			Object.entries(changes).map(([node_id, p]) => ({ node_id, ...p }))
+		).catch(() => {
+			// Best-effort; a transient save failure must not break the graph UI.
 		});
 	}
 
+	// Nodes with a saved position carry it directly in their element definition so
+	// cose's `randomize: false` starts (and settles) from where they already were.
+	// Brand-new nodes are seeded near a known neighbor (instead of defaulting to
+	// (0,0), which would stack multiple new nodes exactly on top of each other) so
+	// cose only really has to place what's actually new. This must be done on the
+	// plain element data *before* constructing cytoscape -- an earlier version set
+	// positions via `node.position()`/`.lock()` after an initial `{name: 'preset'}`
+	// construction pass, but that two-phase approach hit a reproducible cytoscape
+	// bug where a subset of nodes silently rendered as non-visible (confirmed via
+	// `.visible()` already false immediately after construction, before any of this
+	// logic ran) -- baking positions into the elements array for a single direct
+	// construction with the real layout avoids it entirely.
+	function prepareElements(els: ElementDefinition[]): {
+		elements: ElementDefinition[];
+		newIds: Set<string>;
+	} {
+		const newIds = new Set<string>();
+		const knownIds: string[] = [];
+		const nodeIds = new Set<string>();
+		const neighbors: Record<string, string[]> = {};
+
+		for (const el of els) {
+			const d = el.data as any;
+			if (d?.id && !('source' in d)) {
+				nodeIds.add(d.id);
+				if (savedPositions[d.id]) knownIds.push(d.id);
+				else newIds.add(d.id);
+			}
+		}
+		for (const el of els) {
+			const d = el.data as any;
+			if (d?.source && d?.target) {
+				(neighbors[d.source] ??= []).push(d.target);
+				(neighbors[d.target] ??= []).push(d.source);
+			}
+		}
+
+		const prepared = els.map((el) => {
+			const id = (el.data as any)?.id as string | undefined;
+			if (!id || !nodeIds.has(id)) return el;
+			let pos = savedPositions[id];
+			if (!pos) {
+				const neighborWithPos = (neighbors[id] ?? []).find((nb) => savedPositions[nb]);
+				const base = neighborWithPos
+					? savedPositions[neighborWithPos]
+					: knownIds.length
+						? savedPositions[knownIds[Math.floor(Math.random() * knownIds.length)]]
+						: null;
+				if (base) {
+					pos = { x: base.x + (Math.random() - 0.5) * 120, y: base.y + (Math.random() - 0.5) * 120 };
+				}
+			}
+			// Clone, never hand cytoscape a live reference into savedPositions --
+			// cose mutates node position objects in place during its simulation, which
+			// would otherwise silently corrupt the saved values through this same
+			// reference while the layout that's supposed to respect them is running.
+			return pos ? { ...el, position: { x: pos.x, y: pos.y } } : el;
+		});
+
+		return { elements: prepared, newIds };
+	}
+
+	async function ensurePositionsLoaded() {
+		const engId = positions?.engagementId;
+		if (!engId) {
+			savedPositions = {};
+			positionsLoadedFor = '';
+			return;
+		}
+		if (engId === positionsLoadedFor) return;
+		const rows = await listNodePositions(engId);
+		savedPositions = Object.fromEntries(rows.map((r) => [r.node_id, { x: r.x, y: r.y }]));
+		positionsLoadedFor = engId;
+	}
+
+	function rebuild() {
+		cy?.destroy();
+
+		const engId = positions?.engagementId;
+		let preparedElements = elements;
+		let newIds = new Set<string>();
+		let randomize = true;
+		if (engId) {
+			randomize = Object.keys(savedPositions).length === 0;
+			const result = prepareElements(elements);
+			preparedElements = result.elements;
+			newIds = result.newIds;
+		}
+
+		cy = cytoscape({
+			container,
+			elements: preparedElements,
+			style: buildStyle(),
+			layout: buildLayout(randomize),
+			userZoomingEnabled: interactive,
+			userPanningEnabled: interactive,
+			boxSelectionEnabled: interactive,
+			autoungrabify: !interactive
+		});
+		const core = cy;
+
+		core.on('dbltap', 'node[type = "host"]', (evt) => {
+			const id = evt.target.id() as string;
+			onHostDblClick?.(id.replace(/^host:/, ''));
+		});
+
+		if (onNodeSelect) {
+			core.on('tap', 'node', (evt) => {
+				core.nodes().removeClass('selected');
+				const n = evt.target;
+				n.addClass('selected');
+				selectedId = n.id();
+				onNodeSelect({
+					id: (n.id() as string).replace(/^(host|credential):/, ''),
+					type: n.data('type'),
+					data: n.data()
+				});
+			});
+			// Unfiltered `tap` also fires for node taps (delegated up to the core), so
+			// only background taps (evt.target === core) should clear the selection.
+			core.on('tap', (evt) => {
+				if (evt.target === core) {
+					core.nodes().removeClass('selected');
+					selectedId = null;
+					onNodeSelect(null);
+				}
+			});
+			if (selectedId) {
+				const existing = core.getElementById(selectedId);
+				if (existing.length) {
+					existing.addClass('selected');
+				} else {
+					selectedId = null;
+					onNodeSelect(null);
+				}
+			}
+		}
+
+		if (engId) {
+			// The construction above already ran the layout synchronously (animate is
+			// always false). cose's force simulation can still nudge already-known
+			// nodes a little even when seeded at their saved spot (their equilibrium
+			// shifts slightly whenever new nodes/edges join the graph), which would
+			// make already-placed hosts drift a few pixels on every reload/replay
+			// frame. Force them back to their exact saved position now -- keeping
+			// only the newly-placed nodes' freshly-computed positions -- then re-fit
+			// the viewport to the corrected layout.
+			let restoredAny = false;
+			core.nodes().forEach((n) => {
+				const saved = savedPositions[n.id()];
+				if (saved) {
+					n.position({ x: saved.x, y: saved.y });
+					restoredAny = true;
+				}
+			});
+			if (restoredAny) core.fit(undefined, compact ? 20 : 40);
+
+			newIds.forEach((id) => {
+				const p = core.getElementById(id).position();
+				commitPosition(id, { x: p.x, y: p.y });
+			});
+			core.on('dragfree', 'node', (evt) => {
+				const p = evt.target.position();
+				commitPosition(evt.target.id(), { x: p.x, y: p.y });
+			});
+		}
+	}
+
 	$effect(() => {
-		// Re-run whenever the `elements` prop reference changes.
 		void elements;
-		if (container) rebuild();
+		if (!container) return;
+		const engId = positions?.engagementId;
+		if (engId && engId !== positionsLoadedFor) {
+			ensurePositionsLoaded().then(rebuild);
+		} else {
+			rebuild();
+		}
 	});
 
-	onDestroy(() => cy?.destroy());
+	onDestroy(() => {
+		if (flushTimer) {
+			clearTimeout(flushTimer);
+			flush();
+		}
+		cy?.destroy();
+	});
 </script>
 
 <div class="graph-container" bind:this={container}></div>
 
 <style>
-	/*
-	 * `.graph-container` sits in a CSS-grid cell with no explicit row height
-	 * (see the parent `.layout` in graph/+page.svelte and replay/+page.svelte).
-	 * Grid items default to min-height/min-width: auto, so without the
-	 * min-height/min-width: 0 + overflow: hidden below, cytoscape's internal
-	 * canvas-container div (an in-flow child, sized via inline styles derived
-	 * from the *previous* measurement) can inflate this box on every rebuild,
-	 * compounding indefinitely across repeated destroy/recreate cycles
-	 * (e.g. every replay autoplay tick). position: relative establishes the
-	 * containing block cytoscape's own absolutely-positioned canvas layers
-	 * expect.
-	 */
 	.graph-container {
 		height: 100%;
 		width: 100%;

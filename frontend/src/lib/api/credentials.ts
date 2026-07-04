@@ -39,6 +39,10 @@ export function listCredentials(engagementId: string): Promise<Credential[]> {
 	return apiGet(`/api/engagements/${engagementId}/credentials`);
 }
 
+export function getCredential(id: string): Promise<Credential> {
+	return apiGet(`/api/credentials/${id}`);
+}
+
 export function createCredential(
 	engagementId: string,
 	payload: CreateCredentialRequest

@@ -8,6 +8,7 @@
 	import { getGraph } from '$lib/api/graph';
 	import HostCard from '$lib/components/HostCard.svelte';
 	import AttackGraph from '$lib/components/AttackGraph.svelte';
+	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -15,6 +16,7 @@
 	let elements = $state<ElementDefinition[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+	let selected = $state<{ id: string; type: string; data: Record<string, unknown> } | null>(null);
 
 	let showNewHostForm = $state(false);
 	let newLabel = $state('');
@@ -119,11 +121,6 @@
 	{/if}
 
 	<div class="layout">
-		{#if loading}
-			<p>Loading…</p>
-		{:else}
-			<AttackGraph {elements} onHostDblClick={handleHostDblClick} />
-		{/if}
 		<aside class="host-sidebar">
 			<h2>All hosts</h2>
 			{#if hosts.length === 0}
@@ -136,7 +133,26 @@
 				</div>
 			{/if}
 		</aside>
+		{#if loading}
+			<p>Loading…</p>
+		{:else}
+			<AttackGraph
+				{elements}
+				onHostDblClick={handleHostDblClick}
+				onNodeSelect={(s) => (selected = s)}
+				positions={{ engagementId, persist: true }}
+			/>
+		{/if}
 	</div>
+
+	{#if selected}
+		<NodeDetailsPanel
+			selection={selected}
+			{engagementId}
+			onClose={() => (selected = null)}
+			onChanged={load}
+		/>
+	{/if}
 </main>
 
 <style>
@@ -171,7 +187,7 @@
 	}
 	.layout {
 		display: grid;
-		grid-template-columns: 1fr 20rem;
+		grid-template-columns: 20rem 1fr;
 		grid-template-rows: minmax(0, 1fr);
 		gap: 1rem;
 		height: 70vh;

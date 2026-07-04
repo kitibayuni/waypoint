@@ -137,6 +137,7 @@
 					stopPlaying();
 					goto(`/engagements/${engagementId}/hosts/${hostId}`);
 				}}
+				positions={{ engagementId }}
 			/>
 			<aside class="feed">
 				<h2>Feed</h2>

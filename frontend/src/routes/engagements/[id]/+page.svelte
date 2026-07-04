@@ -8,6 +8,7 @@
 	import type { Host } from '$lib/api/hosts';
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
 	import AttackGraph from '$lib/components/AttackGraph.svelte';
+	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -15,6 +16,7 @@
 	let hosts = $state<Host[]>([]);
 	let loading = $state(true);
 	let error = $state('');
+	let selected = $state<{ id: string; type: string; data: Record<string, unknown> } | null>(null);
 
 	let trustFromHostId = $state('');
 	let trustToHostId = $state('');
@@ -97,9 +99,23 @@
 		{#if loading}
 			<p>Loading…</p>
 		{:else}
-			<AttackGraph {elements} onHostDblClick={handleHostDblClick} />
+			<AttackGraph
+				{elements}
+				onHostDblClick={handleHostDblClick}
+				onNodeSelect={(s) => (selected = s)}
+				positions={{ engagementId, persist: true }}
+			/>
 		{/if}
 	</div>
+
+	{#if selected}
+		<NodeDetailsPanel
+			selection={selected}
+			{engagementId}
+			onClose={() => (selected = null)}
+			onChanged={load}
+		/>
+	{/if}
 </main>
 
 <style>
