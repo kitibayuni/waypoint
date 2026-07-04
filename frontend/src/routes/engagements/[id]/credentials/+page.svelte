@@ -159,6 +159,17 @@
 		const tried = new Set((usageByCredential[credentialId] ?? []).map((u) => u.host_id));
 		return hosts.filter((h) => !tried.has(h.id));
 	}
+
+	// Falls back to a domain-shaped hint derived from the source host's hostname
+	// (e.g. dc01.acme.local -> acme.local) when no domain was typed explicitly --
+	// credentials are already grouped by host, so a separate mandatory domain
+	// field is often redundant with what the host record already implies.
+	function hostDomainHint(sourceHostId: string | null): string {
+		if (!sourceHostId) return '';
+		const host = hosts.find((h) => h.id === sourceHostId);
+		const dot = host?.hostname?.indexOf('.') ?? -1;
+		return dot > -1 ? host!.hostname!.slice(dot + 1) : '';
+	}
 </script>
 
 <main>
@@ -177,8 +188,8 @@
 				<input bind:value={newUsername} required />
 			</label>
 			<label>
-				Domain
-				<input bind:value={newDomain} placeholder="ACME.LOCAL" />
+				Domain (optional — inferred from source host if left blank)
+				<input bind:value={newDomain} placeholder="e.g. ACME.LOCAL" />
 			</label>
 			<label>
 				Secret
@@ -236,6 +247,7 @@
 						<th>Type</th>
 						<th>Origin</th>
 						<th>Validated</th>
+						<th>Notes</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -243,10 +255,17 @@
 					{#each group.credentials as credential (credential.id)}
 						<tr class="clickable" onclick={() => toggleExpand(credential)}>
 						<td>{credential.username}</td>
-						<td>{credential.domain ?? ''}</td>
+						<td>
+							{#if credential.domain}
+								{credential.domain}
+							{:else}
+								<span class="muted">{hostDomainHint(credential.source_host_id)}</span>
+							{/if}
+						</td>
 						<td>{credential.secret_type}</td>
 						<td>{credential.origin}</td>
 						<td>{credential.validated ? 'yes' : 'no'}</td>
+						<td>{credential.notes_md}</td>
 						<td>
 							<button
 								onclick={(e) => {
@@ -260,7 +279,7 @@
 					</tr>
 					{#if expandedId === credential.id}
 						<tr>
-							<td colspan="6">
+							<td colspan="7">
 								<div class="expanded">
 									<div class="secret-row">
 										<button onclick={() => handleReveal(credential.id)}>Reveal secret</button>
