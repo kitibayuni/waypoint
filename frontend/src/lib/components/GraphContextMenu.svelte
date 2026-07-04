@@ -47,8 +47,13 @@
 	});
 
 	function handleDocumentClick(e: MouseEvent) {
-		const target = e.target as Node;
-		if (menuEl && !menuEl.contains(target)) onClose();
+		// Use composedPath() rather than e.target: clicking a menu item can swap
+		// <ul> for a <form> synchronously (mode change), detaching the clicked
+		// button from the DOM before this bubbles to document -- at which point
+		// menuEl.contains(e.target) would wrongly read as "outside" and close the
+		// whole menu instead of switching to the sub-form. composedPath() is
+		// captured at dispatch time, before any of that DOM mutation happens.
+		if (menuEl && !e.composedPath().includes(menuEl)) onClose();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {

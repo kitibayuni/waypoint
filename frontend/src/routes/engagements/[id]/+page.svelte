@@ -31,6 +31,7 @@
 		x: number;
 		y: number;
 	} | null>(null);
+	let edgeDrawMode = $state(false);
 
 	let trustFromHostId = $state('');
 	let trustToHostId = $state('');
@@ -80,7 +81,9 @@
 
 <main>
 	<h1>Attack Graph</h1>
-	<p class="muted">Double-click a host node to open its host page.</p>
+	<p class="muted">
+		Double-click a host node to open its host page. Right-click the graph for more actions.
+	</p>
 
 	{#if error}
 		<p class="error">{error}</p>
@@ -109,6 +112,15 @@
 		<button type="submit">Add relationship</button>
 	</form>
 
+	<button
+		type="button"
+		class="draw-toggle"
+		class:active={edgeDrawMode}
+		onclick={() => (edgeDrawMode = !edgeDrawMode)}
+	>
+		{edgeDrawMode ? 'Cancel drawing (drag between two hosts)' : '🔗 Draw relationship'}
+	</button>
+
 	<div class="layout">
 		{#if loading}
 			<p>Loading…</p>
@@ -119,6 +131,7 @@
 				onNodeSelect={(s) => (selected = s)}
 				onContextMenu={(info) => (contextMenu = info)}
 				onEdgeCreate={(info) => (relationshipDraft = info)}
+				bind:edgeDrawMode
 				positions={{ engagementId, persist: true }}
 			/>
 		{/if}
@@ -165,6 +178,14 @@
 	}
 	.layout {
 		height: 70vh;
+	}
+	.draw-toggle {
+		margin-bottom: 0.75rem;
+	}
+	.draw-toggle.active {
+		background: var(--accent);
+		color: #fff;
+		border-color: var(--accent-strong);
 	}
 	.muted {
 		color: var(--text-muted);

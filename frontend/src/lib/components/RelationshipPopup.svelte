@@ -17,6 +17,18 @@
 	let kind = $state('session');
 	let note = $state('');
 	let error = $state('');
+	let listenForOutsideClicks = $state(false);
+
+	// The mouseup that ends the edgehandles drag also fires a native `click` on
+	// the canvas (mousedown and mouseup share the same target element -- the
+	// canvas -- even though the pointer moved a lot in between). That click
+	// would otherwise reach this component's own document listener the instant
+	// it mounts and immediately close it. Defer attaching until the next tick,
+	// after that originating click has already finished bubbling.
+	$effect(() => {
+		const timer = setTimeout(() => (listenForOutsideClicks = true), 0);
+		return () => clearTimeout(timer);
+	});
 
 	$effect(() => {
 		if (!popupEl) return;
@@ -28,6 +40,7 @@
 	});
 
 	function handleDocumentClick(e: MouseEvent) {
+		if (!listenForOutsideClicks) return;
 		const target = e.target as Node;
 		if (popupEl && !popupEl.contains(target)) onClose();
 	}

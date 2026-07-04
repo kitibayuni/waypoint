@@ -13,6 +13,7 @@
 		onNodeSelect,
 		onContextMenu,
 		onEdgeCreate,
+		edgeDrawMode = $bindable(false),
 		compact = false,
 		interactive = true,
 		positions
@@ -30,8 +31,15 @@
 			target: 'background' | 'host' | 'credential';
 			nodeId?: string;
 		}) => void;
-		/** Fires after dragging from one host to another via the edgehandles handle. */
+		/** Fires after dragging from one host to another while `edgeDrawMode` is on. */
 		onEdgeCreate?: (info: { fromHostId: string; toHostId: string; x: number; y: number }) => void;
+		/**
+		 * Bindable: set true to enter "draw a relationship" mode (drag from one host
+		 * to another creates an edge instead of repositioning a node); resets itself
+		 * to false once the drag gesture ends, successful or not. Only meaningful
+		 * when `onEdgeCreate` is also passed.
+		 */
+		edgeDrawMode?: boolean;
 		/** Smaller fonts/padding and tighter layout spacing, for the Dashboard mini-graph panel. */
 		compact?: boolean;
 		/** Set false to disable zoom/pan/box-selection, e.g. for a read-only overview panel. */
@@ -383,6 +391,7 @@
 					source.data('type') === 'host' && target.data('type') === 'host' && source.id() !== target.id(),
 				hoverDelay: 0
 			});
+			if (edgeDrawMode) eh.enableDrawMode();
 			// edgehandles adds a real (placeholder) edge on completion -- the canonical
 			// edge only exists once the relationship pop-up's API call + graph reload
 			// succeed, so remove the placeholder immediately rather than let it linger.
@@ -396,6 +405,13 @@
 					x: rect.left + pos.x,
 					y: rect.top + pos.y
 				});
+			});
+			// A draw gesture only makes one edge at a time; reset the bindable flag
+			// once the gesture ends (successful or cancelled) so the toggle button in
+			// the consuming page automatically flips back to its "off" state, rather
+			// than staying stuck in draw mode (which disables normal node dragging).
+			core.on('ehstop', () => {
+				edgeDrawMode = false;
 			});
 		}
 
@@ -438,6 +454,13 @@
 		} else {
 			rebuild();
 		}
+	});
+
+	// Toggling edgeDrawMode alone (no elements change) doesn't run rebuild(), so
+	// react to it directly against whatever `eh` instance currently exists.
+	$effect(() => {
+		if (edgeDrawMode) eh?.enableDrawMode();
+		else eh?.disableDrawMode();
 	});
 
 	onDestroy(() => {
