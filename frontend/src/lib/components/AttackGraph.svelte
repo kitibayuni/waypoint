@@ -37,6 +37,7 @@
 					}
 				},
 				{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
+				{ selector: 'node[type = "host"][?is_foothold]', style: { 'background-color': '#e04343' } },
 				{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
 				{
 					selector: 'edge',

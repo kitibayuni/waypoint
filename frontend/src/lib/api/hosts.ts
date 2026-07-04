@@ -22,6 +22,7 @@ export interface Host {
 	status: 'discovered' | 'enumerating' | 'exploited' | 'owned' | 'cleared';
 	general_info_md: string;
 	login_notes_md: string;
+	is_foothold: boolean;
 	created_at: string;
 	addresses: HostAddress[];
 	tags: HostTag[];
@@ -48,6 +49,7 @@ export interface UpdateHostRequest {
 	status: string;
 	general_info_md: string;
 	login_notes_md: string;
+	is_foothold: boolean;
 }
 
 export interface Tag {

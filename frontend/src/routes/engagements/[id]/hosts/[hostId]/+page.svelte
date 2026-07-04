@@ -48,6 +48,7 @@
 	let statusDraft = $state('discovered');
 	let notesDraft = $state('');
 	let loginNotesDraft = $state('');
+	let isFootholdDraft = $state(false);
 
 	let allHosts = $state<Host[]>([]);
 	let allTrust = $state<TrustRelationship[]>([]);
@@ -98,6 +99,7 @@
 			statusDraft = h.status;
 			notesDraft = h.general_info_md;
 			loginNotesDraft = h.login_notes_md;
+			isFootholdDraft = h.is_foothold;
 		} catch {
 			error = 'Failed to load host.';
 		} finally {
@@ -117,7 +119,8 @@
 				criticality: criticalityDraft || null,
 				status: statusDraft,
 				general_info_md: notesDraft,
-				login_notes_md: loginNotesDraft
+				login_notes_md: loginNotesDraft,
+				is_foothold: isFootholdDraft
 			});
 			error = '';
 		} catch {
@@ -135,11 +138,31 @@
 				criticality: criticalityDraft || null,
 				status: statusDraft,
 				general_info_md: notesDraft,
-				login_notes_md: loginNotesDraft
+				login_notes_md: loginNotesDraft,
+				is_foothold: isFootholdDraft
 			});
 			error = '';
 		} catch {
 			error = 'Failed to save login procedure notes.';
+		}
+	}
+
+	async function saveFoothold() {
+		try {
+			host = await updateHost(hostId, {
+				label: labelDraft,
+				hostname: hostnameDraft || null,
+				os: osDraft || null,
+				os_family: osFamilyDraft || null,
+				criticality: criticalityDraft || null,
+				status: statusDraft,
+				general_info_md: notesDraft,
+				login_notes_md: loginNotesDraft,
+				is_foothold: isFootholdDraft
+			});
+			error = '';
+		} catch {
+			error = 'Failed to save foothold status.';
 		}
 	}
 
@@ -396,6 +419,12 @@
 					<button type="submit">Log</button>
 				</form>
 
+				<label class="foothold-toggle">
+					<input type="checkbox" bind:checked={isFootholdDraft} />
+					Mark this host as the foothold / initial access point
+				</label>
+				<button onclick={saveFoothold}>Save</button>
+
 				<h2>Login procedure notes</h2>
 				<label>
 					<textarea bind:value={loginNotesDraft} rows="8"></textarea>
@@ -448,7 +477,7 @@
 		{:else if activeTab === 'checklists'}
 			<section>
 				{#if checklists.length === 0}
-					<p class="muted">No checklists yet — create this host from a template to get one.</p>
+					<p class="muted">No checklists yet — add a matching service on the Services tab to get one.</p>
 				{:else}
 					{#each checklists as checklist (checklist.id)}
 						<ChecklistPanel
@@ -504,6 +533,12 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		font-size: 0.9rem;
+	}
+	.foothold-toggle {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 0.75rem;
 	}
 	textarea {
 		width: 100%;

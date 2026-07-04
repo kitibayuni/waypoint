@@ -23,9 +23,10 @@ pub async fn build_graph(
         id: Uuid,
         label: String,
         status: String,
+        is_foothold: bool,
     }
     let hosts: Vec<HostRow> = sqlx::query_as(
-        "SELECT id, label, status::text AS status FROM hosts
+        "SELECT id, label, status::text AS status, is_foothold FROM hosts
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
     )
     .bind(engagement_id)
@@ -89,7 +90,13 @@ pub async fn build_graph(
 
     for h in &hosts {
         nodes.push(json!({
-            "data": { "id": format!("host:{}", h.id), "type": "host", "label": h.label, "status": h.status }
+            "data": {
+                "id": format!("host:{}", h.id),
+                "type": "host",
+                "label": h.label,
+                "status": h.status,
+                "is_foothold": h.is_foothold,
+            }
         }));
     }
 
