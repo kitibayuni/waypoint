@@ -9,6 +9,7 @@
 	import HostCard from '$lib/components/HostCard.svelte';
 	import AttackGraph from '$lib/components/AttackGraph.svelte';
 	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
+	import GraphContextMenu from '$lib/components/GraphContextMenu.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -17,6 +18,12 @@
 	let loading = $state(true);
 	let error = $state('');
 	let selected = $state<{ id: string; type: string; data: Record<string, unknown> } | null>(null);
+	let contextMenu = $state<{
+		x: number;
+		y: number;
+		target: 'background' | 'host' | 'credential';
+		nodeId?: string;
+	} | null>(null);
 
 	let showNewHostForm = $state(false);
 	let newLabel = $state('');
@@ -140,6 +147,7 @@
 				{elements}
 				onHostDblClick={handleHostDblClick}
 				onNodeSelect={(s) => (selected = s)}
+				onContextMenu={(info) => (contextMenu = info)}
 				positions={{ engagementId, persist: true }}
 			/>
 		{/if}
@@ -150,6 +158,15 @@
 			selection={selected}
 			{engagementId}
 			onClose={() => (selected = null)}
+			onChanged={load}
+		/>
+	{/if}
+
+	{#if contextMenu}
+		<GraphContextMenu
+			info={contextMenu}
+			{engagementId}
+			onClose={() => (contextMenu = null)}
 			onChanged={load}
 		/>
 	{/if}

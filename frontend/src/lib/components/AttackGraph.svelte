@@ -8,6 +8,7 @@
 		elements,
 		onHostDblClick,
 		onNodeSelect,
+		onContextMenu,
 		compact = false,
 		interactive = true,
 		positions
@@ -18,6 +19,13 @@
 		onNodeSelect?: (
 			info: { id: string; type: string; data: Record<string, unknown> } | null
 		) => void;
+		/** Fires on right-click of a node or the graph background (native browser menu is suppressed). */
+		onContextMenu?: (info: {
+			x: number;
+			y: number;
+			target: 'background' | 'host' | 'credential';
+			nodeId?: string;
+		}) => void;
 		/** Smaller fonts/padding and tighter layout spacing, for the Dashboard mini-graph panel. */
 		compact?: boolean;
 		/** Set false to disable zoom/pan/box-selection, e.g. for a read-only overview panel. */
@@ -339,6 +347,25 @@
 					onNodeSelect(null);
 				}
 			}
+		}
+
+		if (onContextMenu) {
+			container.oncontextmenu = (e) => e.preventDefault();
+			core.on('cxttap', 'node', (evt) => {
+				const original = evt.originalEvent as MouseEvent;
+				onContextMenu({
+					x: original.clientX,
+					y: original.clientY,
+					target: evt.target.data('type'),
+					nodeId: (evt.target.id() as string).replace(/^(host|credential):/, '')
+				});
+			});
+			core.on('cxttap', (evt) => {
+				if (evt.target === core) {
+					const original = evt.originalEvent as MouseEvent;
+					onContextMenu({ x: original.clientX, y: original.clientY, target: 'background' });
+				}
+			});
 		}
 
 		if (engId) {
