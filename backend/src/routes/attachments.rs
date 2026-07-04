@@ -11,12 +11,10 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
-
-const VALID_SUBJECT_TYPES: [&str; 5] =
-    ["engagement", "host", "finding", "credential", "note"];
+use crate::subject_types::ATTACHMENT_SUBJECT_TYPES;
 
 fn valid_subject_type(s: &str) -> bool {
-    VALID_SUBJECT_TYPES.contains(&s)
+    ATTACHMENT_SUBJECT_TYPES.contains(&s)
 }
 
 fn to_hex(bytes: &[u8]) -> String {

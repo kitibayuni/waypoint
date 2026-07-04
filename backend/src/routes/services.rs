@@ -9,8 +9,8 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::checklists::insert_checklist_from_template;
 use crate::routes::hosts::host_engagement_id;
-use crate::routes::templates::insert_checklist_from_template;
 use crate::state::AppState;
 
 const VALID_PROTOCOLS: [&str; 2] = ["tcp", "udp"];

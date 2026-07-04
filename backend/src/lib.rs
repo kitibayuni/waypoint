@@ -8,3 +8,4 @@ pub mod report;
 pub mod routes;
 pub mod search;
 pub mod state;
+pub mod subject_types;

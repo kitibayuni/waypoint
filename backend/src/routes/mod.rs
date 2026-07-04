@@ -17,7 +17,6 @@ pub mod reports;
 pub mod scope;
 pub mod search;
 pub mod services;
-pub mod templates;
 pub mod timeline;
 pub mod trust_relationships;
 

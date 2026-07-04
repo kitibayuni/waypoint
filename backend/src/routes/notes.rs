@@ -9,11 +9,10 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
-
-const VALID_SUBJECT_TYPES: [&str; 4] = ["engagement", "host", "finding", "credential"];
+use crate::subject_types::NOTE_SUBJECT_TYPES;
 
 fn valid_subject_type(s: &str) -> bool {
-    VALID_SUBJECT_TYPES.contains(&s)
+    NOTE_SUBJECT_TYPES.contains(&s)
 }
 
 async fn note_engagement_id(pool: &PgPool, id: Uuid) -> Result<Uuid, StatusCode> {
