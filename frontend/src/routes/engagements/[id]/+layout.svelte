@@ -14,7 +14,6 @@
 		<a href={`/engagements/${engagementId}/hosts`}>Hosts</a>
 		<a href={`/engagements/${engagementId}/credentials`}>Credentials</a>
 		<a href={`/engagements/${engagementId}/findings`}>Findings</a>
-		<a href={`/engagements/${engagementId}/templates`}>Templates</a>
 		<a href={`/engagements/${engagementId}/search`}>Search</a>
 		<a href={`/engagements/${engagementId}/import`}>Import</a>
 		<a href={`/engagements/${engagementId}/replay`}>Replay</a>

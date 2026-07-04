@@ -39,7 +39,6 @@ pub fn router() -> Router<AppState> {
         .merge(graph::router())
         .merge(checklists::router())
         .merge(notes::router())
-        .merge(templates::router())
         .merge(findings::router())
         .merge(attachments::router())
         .merge(search::router())
