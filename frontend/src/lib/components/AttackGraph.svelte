@@ -73,9 +73,10 @@
 				? {
 						selector: 'edge',
 						style: {
-							width: 1,
-							color: '#fff',
-							'line-color': '#5a6270',
+							width: 1.5,
+							'line-color': '#bbb',
+							'target-arrow-color': '#bbb',
+							'target-arrow-shape': 'triangle',
 							'curve-style': 'bezier',
 							'control-point-step-size': 40
 						}
@@ -98,21 +99,18 @@
 							'curve-style': 'bezier',
 							'control-point-step-size': 60
 						}
-					}
+					},
+			// Same trust/cred-reuse color language in both modes -- compact only
+			// drops the text labels for space, not the rest of the visual identity.
+			{
+				selector: 'edge[type = "cred-reuse"]',
+				style: { 'line-color': '#a0663b', 'target-arrow-color': '#a0663b' }
+			},
+			{
+				selector: 'edge[type = "trust"]',
+				style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
+			}
 		];
-
-		if (!compact) {
-			styles.push(
-				{
-					selector: 'edge[type = "cred-reuse"]',
-					style: { 'line-color': '#a0663b', 'target-arrow-color': '#a0663b' }
-				},
-				{
-					selector: 'edge[type = "trust"]',
-					style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
-				}
-			);
-		}
 
 		return styles;
 	}
