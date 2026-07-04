@@ -3,6 +3,7 @@
 	import { createCredential, deleteCredential } from '$lib/api/credentials';
 	import { createFinding } from '$lib/api/findings';
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
+	import { deleteService } from '$lib/api/services';
 
 	let {
 		info,
@@ -10,7 +11,14 @@
 		onClose,
 		onChanged
 	}: {
-		info: { x: number; y: number; target: 'background' | 'host' | 'credential'; nodeId?: string };
+		info: {
+			x: number;
+			y: number;
+			target: 'background' | 'host' | 'credential' | 'service';
+			nodeId?: string;
+			/** The owning host id, only set when target is 'service'. */
+			hostId?: string;
+		};
 		engagementId: string;
 		onClose: () => void;
 		onChanged: () => void;
@@ -30,6 +38,7 @@
 	let credSecret = $state('');
 	let credSecretType = $state('plaintext');
 	let credOrigin = $state('captured');
+	let credNotes = $state('');
 
 	let findingTitle = $state('');
 	let findingSeverity = $state('');
@@ -70,11 +79,16 @@
 				addresses: hostAddresses
 					.split(',')
 					.map((s) => s.trim())
-					.filter(Boolean)
+					.filter(Boolean),
+				source_service_id: info.target === 'service' ? info.nodeId : null
 			});
-			if (info.target === 'host' && info.nodeId) {
+			// Pivoting from either a host or one of its services also logs a normal
+			// host-to-host trust relationship, so the new host stays connected into
+			// the regular attack graph -- not just reachable via the service arrow.
+			const fromHostId = info.target === 'host' ? info.nodeId : info.hostId;
+			if (fromHostId) {
 				await createTrustRelationship(engagementId, {
-					from_host_id: info.nodeId,
+					from_host_id: fromHostId,
 					to_host_id: created.id,
 					kind: hostKind,
 					note: null
@@ -97,7 +111,9 @@
 				secret: credSecret,
 				secret_type: credSecretType,
 				origin: credOrigin,
-				source_host_id: info.target === 'host' ? info.nodeId : null
+				notes_md: credNotes,
+				source_host_id: info.target === 'host' ? info.nodeId : (info.hostId ?? null),
+				source_service_id: info.target === 'service' ? info.nodeId : null
 			});
 			onChanged();
 			onClose();
@@ -110,10 +126,11 @@
 		e.preventDefault();
 		if (!findingTitle.trim()) return;
 		try {
+			const affectedHostId = info.target === 'host' ? info.nodeId : info.hostId;
 			await createFinding(engagementId, {
 				title: findingTitle,
 				severity: findingSeverity || null,
-				affected_host_ids: info.target === 'host' && info.nodeId ? [info.nodeId] : []
+				affected_host_ids: affectedHostId ? [affectedHostId] : []
 			});
 			onChanged();
 			onClose();
@@ -124,18 +141,19 @@
 
 	async function handleDelete() {
 		if (!info.nodeId) return;
-		const kind = info.target === 'host' ? 'host' : 'credential';
-		if (!confirm(`Delete this ${kind}? This cannot be undone.`)) return;
+		if (!confirm(`Delete this ${info.target}? This cannot be undone.`)) return;
 		try {
 			if (info.target === 'host') {
 				await deleteHost(info.nodeId);
 			} else if (info.target === 'credential') {
 				await deleteCredential(info.nodeId);
+			} else if (info.target === 'service' && info.hostId) {
+				await deleteService(info.hostId, info.nodeId);
 			}
 			onChanged();
 			onClose();
 		} catch {
-			error = `Failed to delete ${kind}.`;
+			error = `Failed to delete ${info.target}.`;
 		}
 	}
 </script>
@@ -162,7 +180,13 @@
 		</ul>
 	{:else if mode === 'add-host'}
 		<form onsubmit={handleAddHost}>
-			<h3>Add host{info.target === 'host' ? ' (pivot from this host)' : ''}</h3>
+			<h3>
+				Add host{info.target === 'host'
+					? ' (pivot from this host)'
+					: info.target === 'service'
+						? ' (pivot from this service)'
+						: ''}
+			</h3>
 			<label>
 				Label
 				<input bind:value={hostLabel} required placeholder="e.g. WEB02" />
@@ -175,7 +199,7 @@
 				IP addresses (comma-separated)
 				<input bind:value={hostAddresses} placeholder="10.10.10.7" />
 			</label>
-			{#if info.target === 'host'}
+			{#if info.target === 'host' || info.target === 'service'}
 				<label>
 					Relationship kind
 					<select bind:value={hostKind}>
@@ -225,6 +249,10 @@
 					<option value="default">default</option>
 					<option value="created">created</option>
 				</select>
+			</label>
+			<label>
+				Notes
+				<input bind:value={credNotes} placeholder="e.g. found in LSASS dump" />
 			</label>
 			<div class="actions">
 				<button type="submit">Add</button>

@@ -7,7 +7,9 @@ use uuid::Uuid;
 /// Cytoscape.js elements ({ data: {...} }) so the frontend can pass
 /// `[...nodes, ...edges]` straight into `cytoscape({ elements })`.
 ///
-/// Node types: host, credential. Edge types: trust, cred-reuse.
+/// Node types: host, credential, service. Edge types: trust, cred-reuse,
+/// has-service (host owns this service), service-origin (a host/credential was
+/// discovered via this specific service).
 ///
 /// `as_of`, when set, replays the graph as it looked at that moment
 /// (DESIGN.md §8.2): every contributing query is filtered by the timestamp
@@ -25,9 +27,10 @@ pub async fn build_graph(
         status: String,
         is_foothold: bool,
         is_pivot: bool,
+        source_service_id: Option<Uuid>,
     }
     let hosts: Vec<HostRow> = sqlx::query_as(
-        "SELECT id, label, status::text AS status, is_foothold, is_pivot FROM hosts
+        "SELECT id, label, status::text AS status, is_foothold, is_pivot, source_service_id FROM hosts
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
     )
     .bind(engagement_id)
@@ -40,10 +43,31 @@ pub async fn build_graph(
         id: Uuid,
         username: String,
         domain: Option<String>,
+        source_service_id: Option<Uuid>,
     }
     let credentials: Vec<CredRow> = sqlx::query_as(
-        "SELECT id, username, domain FROM credentials
+        "SELECT id, username, domain, source_service_id FROM credentials
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
+    )
+    .bind(engagement_id)
+    .bind(as_of)
+    .fetch_all(pool)
+    .await?;
+
+    #[derive(sqlx::FromRow)]
+    struct ServiceRow {
+        id: Uuid,
+        host_id: Uuid,
+        port: i32,
+        protocol: String,
+        name: Option<String>,
+        display_name: Option<String>,
+    }
+    let services: Vec<ServiceRow> = sqlx::query_as(
+        "SELECT s.id, s.host_id, s.port, s.protocol::text AS protocol, s.name, s.display_name
+         FROM services s
+         JOIN hosts h ON h.id = s.host_id
+         WHERE h.engagement_id = $1 AND ($2::timestamptz IS NULL OR s.created_at <= $2)",
     )
     .bind(engagement_id)
     .bind(as_of)
@@ -100,6 +124,16 @@ pub async fn build_graph(
                 "is_pivot": h.is_pivot,
             }
         }));
+        if let Some(service_id) = h.source_service_id {
+            edges.push(json!({
+                "data": {
+                    "id": format!("edge:service-origin:host:{}", h.id),
+                    "source": format!("service:{}", service_id),
+                    "target": format!("host:{}", h.id),
+                    "type": "service-origin",
+                }
+            }));
+        }
     }
 
     for c in &credentials {
@@ -109,6 +143,42 @@ pub async fn build_graph(
                 "type": "credential",
                 "label": c.username,
                 "domain": c.domain,
+            }
+        }));
+        if let Some(service_id) = c.source_service_id {
+            edges.push(json!({
+                "data": {
+                    "id": format!("edge:service-origin:credential:{}", c.id),
+                    "source": format!("service:{}", service_id),
+                    "target": format!("credential:{}", c.id),
+                    "type": "service-origin",
+                }
+            }));
+        }
+    }
+
+    for s in &services {
+        let label = s
+            .display_name
+            .clone()
+            .unwrap_or_else(|| format!("{}/{}", s.port, s.protocol));
+        nodes.push(json!({
+            "data": {
+                "id": format!("service:{}", s.id),
+                "type": "service",
+                "label": label,
+                "port": s.port,
+                "protocol": s.protocol,
+                "name": s.name,
+                "host_id": s.host_id,
+            }
+        }));
+        edges.push(json!({
+            "data": {
+                "id": format!("edge:has-service:{}", s.id),
+                "source": format!("host:{}", s.host_id),
+                "target": format!("service:{}", s.id),
+                "type": "has-service",
             }
         }));
     }

@@ -22,8 +22,9 @@
 	let contextMenu = $state<{
 		x: number;
 		y: number;
-		target: 'background' | 'host' | 'credential';
+		target: 'background' | 'host' | 'credential' | 'service';
 		nodeId?: string;
+		hostId?: string;
 	} | null>(null);
 	let relationshipDraft = $state<{
 		fromHostId: string;
@@ -47,8 +48,15 @@
 			const [hostList, graph] = await Promise.all([listHosts(engagementId), getGraph(engagementId)]);
 			hosts = hostList;
 			elements = [
-				...graph.nodes.filter((n) => n.data.type === 'host'),
-				...graph.edges.filter((e) => e.data.type === 'trust')
+				...graph.nodes.filter((n) => n.data.type === 'host' || n.data.type === 'service'),
+				...graph.edges.filter(
+					(e) =>
+						e.data.type === 'trust' ||
+						e.data.type === 'has-service' ||
+						// service-origin can also target a credential; only keep the ones
+						// pointing at a host since credential nodes aren't shown here.
+						(e.data.type === 'service-origin' && (e.data.target as string)?.startsWith('host:'))
+				)
 			] as ElementDefinition[];
 		} catch {
 			error = 'Failed to load hosts.';

@@ -51,6 +51,7 @@ pub struct Credential {
     domain: Option<String>,
     secret_type: String,
     source_host_id: Option<Uuid>,
+    source_service_id: Option<Uuid>,
     origin: String,
     validated: bool,
     notes_md: String,
@@ -58,7 +59,7 @@ pub struct Credential {
 }
 
 const CREDENTIAL_SELECT: &str = "SELECT id, engagement_id, username, domain,
-    secret_type::text AS secret_type, source_host_id, origin::text AS origin,
+    secret_type::text AS secret_type, source_host_id, source_service_id, origin::text AS origin,
     validated, notes_md, created_at FROM credentials";
 
 #[derive(Deserialize)]
@@ -68,6 +69,10 @@ pub struct CreateCredentialRequest {
     secret: String,
     secret_type: String,
     source_host_id: Option<Uuid>,
+    /// Only set from the attack graph's "Add credential" action on a service node --
+    /// drives a service->credential arrow. Not editable afterward.
+    #[serde(default)]
+    source_service_id: Option<Uuid>,
     #[serde(default = "default_origin")]
     origin: String,
     #[serde(default)]
@@ -123,8 +128,8 @@ async fn create_credential(
     let encrypted = state.cred_cipher.encrypt(&payload.secret);
 
     let (id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO credentials (engagement_id, username, domain, secret, secret_type, source_host_id, origin, validated, notes_md)
-         VALUES ($1, $2, $3, $4, $5::credential_secret_type, $6, $7::credential_origin, $8, $9)
+        "INSERT INTO credentials (engagement_id, username, domain, secret, secret_type, source_host_id, source_service_id, origin, validated, notes_md)
+         VALUES ($1, $2, $3, $4, $5::credential_secret_type, $6, $7, $8::credential_origin, $9, $10)
          RETURNING id",
     )
     .bind(engagement_id)
@@ -133,6 +138,7 @@ async fn create_credential(
     .bind(&encrypted)
     .bind(&payload.secret_type)
     .bind(payload.source_host_id)
+    .bind(payload.source_service_id)
     .bind(&payload.origin)
     .bind(payload.validated)
     .bind(&payload.notes_md)

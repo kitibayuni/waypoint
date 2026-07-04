@@ -220,6 +220,22 @@
 					<code>{revealedSecret}</code>
 				{/if}
 			</div>
+		{:else if selection.type === 'service'}
+			<dl>
+				<dt>Port</dt>
+				<dd>{selection.data.port}/{selection.data.protocol}</dd>
+				{#if selection.data.name}
+					<dt>Service</dt>
+					<dd>{selection.data.name}</dd>
+				{/if}
+			</dl>
+			{#if selection.data.host_id}
+				<p>
+					<a href={`/engagements/${engagementId}/hosts/${selection.data.host_id}`}>
+						Open host's Services tab &rarr;
+					</a>
+				</p>
+			{/if}
 		{/if}
 	</aside>
 {/if}

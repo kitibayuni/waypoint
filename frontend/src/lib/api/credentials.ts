@@ -7,6 +7,7 @@ export interface Credential {
 	domain: string | null;
 	secret_type: 'plaintext' | 'ntlm' | 'kerb' | 'ssh_key' | 'hash_other';
 	source_host_id: string | null;
+	source_service_id: string | null;
 	origin: 'captured' | 'cracked' | 'sprayed' | 'default' | 'created';
 	validated: boolean;
 	notes_md: string;
@@ -19,6 +20,7 @@ export interface CreateCredentialRequest {
 	secret: string;
 	secret_type: string;
 	source_host_id?: string | null;
+	source_service_id?: string | null;
 	origin?: string;
 	validated?: boolean;
 	notes_md?: string;

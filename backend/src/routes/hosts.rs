@@ -86,6 +86,7 @@ pub struct Host {
     login_notes_md: String,
     is_foothold: bool,
     is_pivot: bool,
+    source_service_id: Option<Uuid>,
     created_at: DateTime<Utc>,
     #[sqlx(json)]
     addresses: Vec<AddressRef>,
@@ -94,7 +95,8 @@ pub struct Host {
 }
 
 const HOST_SELECT: &str = "SELECT h.id, h.engagement_id, h.label, h.hostname, h.os, h.os_family,
-    h.criticality, h.status::text AS status, h.general_info_md, h.login_notes_md, h.is_foothold, h.is_pivot, h.created_at,
+    h.criticality, h.status::text AS status, h.general_info_md, h.login_notes_md, h.is_foothold, h.is_pivot,
+    h.source_service_id, h.created_at,
     COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object('id', ha.id, 'ip', host(ha.ip), 'is_primary', ha.is_primary))
             FILTER (WHERE ha.id IS NOT NULL),
@@ -124,6 +126,11 @@ pub struct CreateHostRequest {
     addresses: Vec<String>,
     #[serde(default)]
     tags: Vec<String>,
+    /// Only set from the attack graph's "Add host" action on a service node --
+    /// attributes this host as discovered via that specific service, driving a
+    /// service->host arrow. Not editable afterward (no UpdateHostRequest field).
+    #[serde(default)]
+    source_service_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -192,8 +199,8 @@ async fn create_host(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (host_id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO hosts (engagement_id, label, hostname, os, os_family, criticality, status, general_info_md)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::host_status, $8)
+        "INSERT INTO hosts (engagement_id, label, hostname, os, os_family, criticality, status, general_info_md, source_service_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::host_status, $8, $9)
          RETURNING id",
     )
     .bind(engagement_id)
@@ -204,6 +211,7 @@ async fn create_host(
     .bind(&payload.criticality)
     .bind(&payload.status)
     .bind(&payload.general_info_md)
+    .bind(payload.source_service_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

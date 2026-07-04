@@ -22,8 +22,9 @@
 	let contextMenu = $state<{
 		x: number;
 		y: number;
-		target: 'background' | 'host' | 'credential';
+		target: 'background' | 'host' | 'credential' | 'service';
 		nodeId?: string;
+		hostId?: string;
 	} | null>(null);
 	let relationshipDraft = $state<{
 		fromHostId: string;

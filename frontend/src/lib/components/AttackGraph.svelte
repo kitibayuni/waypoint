@@ -28,8 +28,10 @@
 		onContextMenu?: (info: {
 			x: number;
 			y: number;
-			target: 'background' | 'host' | 'credential';
+			target: 'background' | 'host' | 'credential' | 'service';
 			nodeId?: string;
+			/** The owning host id, only set when target is 'service'. */
+			hostId?: string;
 		}) => void;
 		/** Fires after dragging from one host to another while `edgeDrawMode` is on. */
 		onEdgeCreate?: (info: { fromHostId: string; toHostId: string; x: number; y: number }) => void;
@@ -102,6 +104,18 @@
 					'border-color': '#ffffff'
 				}
 			},
+			// Services are a visually distinct third category -- neither host nor
+			// credential -- so they read as satellites rather than being mistaken
+			// for either.
+			{
+				selector: 'node[type = "service"]',
+				style: {
+					shape: 'ellipse',
+					'background-color': '#7a5ca0',
+					'font-size': compact ? '6px' : '8px',
+					padding: compact ? '4px' : '6px'
+				}
+			},
 			// Border rather than background, since background already encodes
 			// host/credential/foothold identity -- matches the --warning design token.
 			{
@@ -143,11 +157,27 @@
 			// drops the text labels for space, not the rest of the visual identity.
 			{
 				selector: 'edge[type = "cred-reuse"]',
-				style: { 'line-color': '#a0663b', 'target-arrow-color': '#a0663b' }
+				style: { 'line-color': '#ffffff', 'target-arrow-color': '#ffffff' }
 			},
 			{
 				selector: 'edge[type = "trust"]',
 				style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
+			},
+			// Ownership, not an attack path -- a quiet, undirected-looking connector
+			// rather than a directional arrow.
+			{
+				selector: 'edge[type = "has-service"]',
+				style: {
+					'line-color': '#666',
+					'line-style': 'dashed',
+					width: 1,
+					'target-arrow-shape': 'none',
+					'curve-style': 'bezier'
+				}
+			},
+			{
+				selector: 'edge[type = "service-origin"]',
+				style: { 'line-color': '#7a5ca0', 'target-arrow-color': '#7a5ca0' }
 			}
 		];
 
@@ -370,11 +400,13 @@
 			container.oncontextmenu = (e) => e.preventDefault();
 			core.on('cxttap', 'node', (evt) => {
 				const original = evt.originalEvent as MouseEvent;
+				const type = evt.target.data('type');
 				onContextMenu({
 					x: original.clientX,
 					y: original.clientY,
-					target: evt.target.data('type'),
-					nodeId: (evt.target.id() as string).replace(/^(host|credential):/, '')
+					target: type,
+					nodeId: (evt.target.id() as string).replace(/^(host|credential|service):/, ''),
+					hostId: type === 'service' ? (evt.target.data('host_id') as string) : undefined
 				});
 			});
 			core.on('cxttap', (evt) => {

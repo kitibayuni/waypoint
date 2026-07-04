@@ -24,6 +24,7 @@ export interface Host {
 	login_notes_md: string;
 	is_foothold: boolean;
 	is_pivot: boolean;
+	source_service_id: string | null;
 	created_at: string;
 	addresses: HostAddress[];
 	tags: HostTag[];
@@ -39,6 +40,7 @@ export interface CreateHostRequest {
 	general_info_md?: string;
 	addresses?: string[];
 	tags?: string[];
+	source_service_id?: string | null;
 }
 
 export interface UpdateHostRequest {
