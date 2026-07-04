@@ -41,6 +41,8 @@
 	let selectedId: string | null = null;
 	let pendingChanges: Record<string, { x: number; y: number }> = {};
 	let flushTimer: ReturnType<typeof setTimeout> | null = null;
+	let resizeObserver: ResizeObserver | null = null;
+	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function buildStyle(): any[] {
 		const styles: any[] = [
@@ -61,8 +63,22 @@
 				}
 			},
 			{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
+			// Pivot (orange) is declared before foothold (red) so a host that is both
+			// renders as foothold -- initial access is the higher-priority signal.
+			{ selector: 'node[type = "host"][?is_pivot]', style: { 'background-color': '#d9891f' } },
 			{ selector: 'node[type = "host"][?is_foothold]', style: { 'background-color': '#e04343' } },
-			{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
+			// Credential ("user") nodes: translucent black fill with a white outline,
+			// rather than a flat color, to read visually distinct from host nodes.
+			{
+				selector: 'node[type = "credential"]',
+				style: {
+					'background-color': '#000000',
+					'background-opacity': 0.55,
+					'border-width': 2,
+					'border-style': 'solid',
+					'border-color': '#ffffff'
+				}
+			},
 			// Border rather than background, since background already encodes
 			// host/credential/foothold identity -- matches the --warning design token.
 			{
@@ -250,6 +266,8 @@
 
 	function rebuild() {
 		cy?.destroy();
+		resizeObserver?.disconnect();
+		resizeObserver = null;
 
 		const engId = positions?.engagementId;
 		let preparedElements = elements;
@@ -273,6 +291,18 @@
 			autoungrabify: !interactive
 		});
 		const core = cy;
+
+		// Cytoscape never re-observes its container's size on its own -- without this
+		// the canvas keeps whatever dimensions it had at construction time even after
+		// the window or a split panel resizes, until the next full rebuild.
+		resizeObserver = new ResizeObserver(() => {
+			if (resizeTimer) clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(() => {
+				core.resize();
+				core.fit(undefined, compact ? 20 : 40);
+			}, 120);
+		});
+		resizeObserver.observe(container);
 
 		core.on('dbltap', 'node[type = "host"]', (evt) => {
 			const id = evt.target.id() as string;
@@ -357,6 +387,8 @@
 			clearTimeout(flushTimer);
 			flush();
 		}
+		if (resizeTimer) clearTimeout(resizeTimer);
+		resizeObserver?.disconnect();
 		cy?.destroy();
 	});
 </script>

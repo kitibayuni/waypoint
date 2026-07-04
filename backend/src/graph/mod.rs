@@ -24,9 +24,10 @@ pub async fn build_graph(
         label: String,
         status: String,
         is_foothold: bool,
+        is_pivot: bool,
     }
     let hosts: Vec<HostRow> = sqlx::query_as(
-        "SELECT id, label, status::text AS status, is_foothold FROM hosts
+        "SELECT id, label, status::text AS status, is_foothold, is_pivot FROM hosts
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
     )
     .bind(engagement_id)
@@ -96,6 +97,7 @@ pub async fn build_graph(
                 "label": h.label,
                 "status": h.status,
                 "is_foothold": h.is_foothold,
+                "is_pivot": h.is_pivot,
             }
         }));
     }

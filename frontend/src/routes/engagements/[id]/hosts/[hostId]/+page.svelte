@@ -49,6 +49,7 @@
 	let notesDraft = $state('');
 	let loginNotesDraft = $state('');
 	let isFootholdDraft = $state(false);
+	let isPivotDraft = $state(false);
 
 	let allHosts = $state<Host[]>([]);
 	let allTrust = $state<TrustRelationship[]>([]);
@@ -100,6 +101,7 @@
 			notesDraft = h.general_info_md;
 			loginNotesDraft = h.login_notes_md;
 			isFootholdDraft = h.is_foothold;
+			isPivotDraft = h.is_pivot;
 		} catch {
 			error = 'Failed to load host.';
 		} finally {
@@ -124,7 +126,8 @@
 				status: statusDraft,
 				general_info_md: notesDraft,
 				login_notes_md: loginNotesDraft,
-				is_foothold: isFootholdDraft
+				is_foothold: isFootholdDraft,
+				is_pivot: isPivotDraft
 			});
 			error = '';
 		} catch {
@@ -389,7 +392,11 @@
 					<input type="checkbox" bind:checked={isFootholdDraft} />
 					Mark this host as the foothold / initial access point
 				</label>
-				<button onclick={() => saveHost('Failed to save foothold status.')}>Save</button>
+				<label class="foothold-toggle">
+					<input type="checkbox" bind:checked={isPivotDraft} />
+					Mark this host as a pivot point
+				</label>
+				<button onclick={() => saveHost('Failed to save foothold/pivot status.')}>Save</button>
 
 				<h2>Login procedure notes</h2>
 				<label>

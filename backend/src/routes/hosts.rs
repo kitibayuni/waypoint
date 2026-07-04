@@ -85,6 +85,7 @@ pub struct Host {
     general_info_md: String,
     login_notes_md: String,
     is_foothold: bool,
+    is_pivot: bool,
     created_at: DateTime<Utc>,
     #[sqlx(json)]
     addresses: Vec<AddressRef>,
@@ -93,7 +94,7 @@ pub struct Host {
 }
 
 const HOST_SELECT: &str = "SELECT h.id, h.engagement_id, h.label, h.hostname, h.os, h.os_family,
-    h.criticality, h.status::text AS status, h.general_info_md, h.login_notes_md, h.is_foothold, h.created_at,
+    h.criticality, h.status::text AS status, h.general_info_md, h.login_notes_md, h.is_foothold, h.is_pivot, h.created_at,
     COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object('id', ha.id, 'ip', host(ha.ip), 'is_primary', ha.is_primary))
             FILTER (WHERE ha.id IS NOT NULL),
@@ -138,6 +139,8 @@ pub struct UpdateHostRequest {
     login_notes_md: String,
     #[serde(default)]
     is_foothold: bool,
+    #[serde(default)]
+    is_pivot: bool,
 }
 
 #[derive(Deserialize)]
@@ -284,7 +287,8 @@ async fn update_host(
 
     let result = sqlx::query(
         "UPDATE hosts SET label = $1, hostname = $2, os = $3, os_family = $4, criticality = $5,
-         status = $6::host_status, general_info_md = $7, login_notes_md = $8, is_foothold = $9 WHERE id = $10",
+         status = $6::host_status, general_info_md = $7, login_notes_md = $8, is_foothold = $9,
+         is_pivot = $10 WHERE id = $11",
     )
     .bind(&payload.label)
     .bind(&payload.hostname)
@@ -295,6 +299,7 @@ async fn update_host(
     .bind(&payload.general_info_md)
     .bind(&payload.login_notes_md)
     .bind(payload.is_foothold)
+    .bind(payload.is_pivot)
     .bind(id)
     .execute(&state.pool)
     .await

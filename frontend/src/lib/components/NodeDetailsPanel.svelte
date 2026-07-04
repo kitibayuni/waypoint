@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getHost, createHost } from '$lib/api/hosts';
+	import { getHost, createHost, updateHost } from '$lib/api/hosts';
 	import type { Host } from '$lib/api/hosts';
 	import { getCredential, revealCredential } from '$lib/api/credentials';
 	import type { Credential } from '$lib/api/credentials';
@@ -62,6 +62,26 @@
 		}
 	}
 
+	async function toggleFoothold() {
+		if (!host) return;
+		try {
+			host = await updateHost(host.id, { ...host, is_foothold: !host.is_foothold });
+			onChanged();
+		} catch {
+			error = 'Failed to update foothold status.';
+		}
+	}
+
+	async function togglePivot() {
+		if (!host) return;
+		try {
+			host = await updateHost(host.id, { ...host, is_pivot: !host.is_pivot });
+			onChanged();
+		} catch {
+			error = 'Failed to update pivot status.';
+		}
+	}
+
 	async function handleReveal() {
 		if (!credential) return;
 		try {
@@ -119,7 +139,11 @@
 		{:else if host}
 			<dl>
 				<dt>Status</dt>
-				<dd>{host.status}{#if host.is_foothold} · <span class="badge">foothold</span>{/if}</dd>
+				<dd>
+					{host.status}
+					{#if host.is_foothold} · <span class="badge">foothold</span>{/if}
+					{#if host.is_pivot} · <span class="badge pivot">pivot</span>{/if}
+				</dd>
 				{#if host.hostname}
 					<dt>Hostname</dt>
 					<dd>{host.hostname}</dd>
@@ -138,6 +162,15 @@
 				{/if}
 			</dl>
 			<p><a href={`/engagements/${engagementId}/hosts/${host.id}`}>Open host page &rarr;</a></p>
+
+			<label class="toggle-row">
+				<input type="checkbox" checked={host.is_foothold} onchange={toggleFoothold} />
+				Foothold / initial access
+			</label>
+			<label class="toggle-row">
+				<input type="checkbox" checked={host.is_pivot} onchange={togglePivot} />
+				Pivot point
+			</label>
 
 			<h3>Add host accessible from {host.label}</h3>
 			<form onsubmit={handleAddHost}>
@@ -237,6 +270,16 @@
 	.badge {
 		color: var(--error);
 		font-weight: 600;
+	}
+	.badge.pivot {
+		color: var(--warning);
+	}
+	.toggle-row {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		margin-bottom: 0.3rem;
 	}
 	dl {
 		margin: 0 0 0.75rem;

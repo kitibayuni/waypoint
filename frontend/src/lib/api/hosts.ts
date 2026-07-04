@@ -23,6 +23,7 @@ export interface Host {
 	general_info_md: string;
 	login_notes_md: string;
 	is_foothold: boolean;
+	is_pivot: boolean;
 	created_at: string;
 	addresses: HostAddress[];
 	tags: HostTag[];
@@ -50,6 +51,7 @@ export interface UpdateHostRequest {
 	general_info_md: string;
 	login_notes_md: string;
 	is_foothold: boolean;
+	is_pivot: boolean;
 }
 
 export interface Tag {
