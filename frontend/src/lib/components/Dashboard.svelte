@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import cytoscape from 'cytoscape';
-	import type { Core, ElementDefinition } from 'cytoscape';
+	import type { ElementDefinition } from 'cytoscape';
 	import { getDashboard } from '$lib/api/dashboard';
 	import type { Dashboard } from '$lib/api/dashboard';
 	import { getGraph } from '$lib/api/graph';
+	import AttackGraph from '$lib/components/AttackGraph.svelte';
 
 	let { engagementId }: { engagementId: string } = $props();
 
 	let dashboard = $state<Dashboard | null>(null);
+	let graphElements = $state<ElementDefinition[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let miniGraphContainer: HTMLDivElement = $state()!;
-	let cy: Core | null = null;
 
 	// Host status is a workflow progression (an ordinal scale), so it takes
 	// one hue with monotone lightness rather than distinct categorical hues.
@@ -41,59 +40,7 @@
 		try {
 			const [dash, graph] = await Promise.all([getDashboard(engagementId), getGraph(engagementId)]);
 			dashboard = dash;
-
-			cy?.destroy();
-			cy = cytoscape({
-				container: miniGraphContainer,
-				elements: [...graph.nodes, ...graph.edges] as ElementDefinition[],
-				style: [
-					{
-						selector: 'node',
-						style: {
-							label: 'data(label)',
-							color: '#fff',
-							'text-valign': 'center',
-							'text-halign': 'center',
-							'text-wrap': 'wrap',
-							'text-max-width': '60px',
-							'font-size': '7px',
-							width: 'label',
-							height: 'label',
-							padding: '6px',
-							shape: 'round-rectangle'
-						}
-					},
-					{ selector: 'node[type = "host"]', style: { 'background-color': '#3b6fa0' } },
-					{ selector: 'node[type = "host"][?is_foothold]', style: { 'background-color': '#e04343' } },
-					{ selector: 'node[type = "credential"]', style: { 'background-color': '#a0663b' } },
-					{
-						selector: 'edge',
-						style: {
-							width: 1,
-							color: '#fff',
-							'line-color': '#5a6270',
-							'curve-style': 'bezier',
-							'control-point-step-size': 40
-						}
-					}
-				],
-				layout: {
-					name: 'cose',
-					animate: false,
-					fit: true,
-					padding: 20,
-					nodeDimensionsIncludeLabels: true,
-					componentSpacing: 80,
-					idealEdgeLength: () => 30,
-					edgeElasticity: () => 100,
-					gravity: 60,
-					numIter: 2000,
-					nodeOverlap: 10
-				},
-				userZoomingEnabled: false,
-				userPanningEnabled: false,
-				boxSelectionEnabled: false
-			});
+			graphElements = [...graph.nodes, ...graph.edges] as ElementDefinition[];
 		} catch {
 			error = 'Failed to load dashboard.';
 		} finally {
@@ -101,10 +48,7 @@
 		}
 	}
 
-	onMount(() => {
-		load();
-		return () => cy?.destroy();
-	});
+	onMount(load);
 
 	function maxOf(counts: Record<string, number>): number {
 		const values = Object.values(counts);
@@ -213,7 +157,9 @@
 
 			<section class="panel graph-panel">
 				<h3>Attack graph</h3>
-				<div class="mini-graph" bind:this={miniGraphContainer}></div>
+				<div class="mini-graph">
+					<AttackGraph elements={graphElements} compact interactive={false} />
+				</div>
 			</section>
 		</div>
 	{/if}
@@ -332,9 +278,9 @@
 		grid-column: 1 / -1;
 	}
 	.mini-graph {
+		/* AttackGraph's own .graph-container supplies the border/background/
+		   radius; this wrapper only needs to give it a definite height to
+		   fill (see AttackGraph.svelte's height: 100% comment). */
 		height: 14rem;
-		background: var(--surface);
-		border: 1px solid var(--gridline);
-		border-radius: 6px;
 	}
 </style>

@@ -50,7 +50,7 @@
 		e.preventDefault();
 		if (!newLabel.trim()) return;
 		try {
-			const host = await createHost(engagementId, {
+			await createHost(engagementId, {
 				label: newLabel,
 				hostname: newHostname || null,
 				os: newOs || null,
@@ -63,7 +63,6 @@
 					.map((s) => s.trim())
 					.filter(Boolean)
 			});
-			hosts = [...hosts, host];
 			newLabel = '';
 			newHostname = '';
 			newOs = '';

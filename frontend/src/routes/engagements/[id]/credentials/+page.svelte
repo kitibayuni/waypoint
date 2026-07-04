@@ -42,12 +42,19 @@
 				unassigned.push(c);
 			}
 		}
-		const groups: { label: string; credentials: Credential[] }[] = [];
+		const groups: { label: string; domainHint: string; credentials: Credential[] }[] = [];
 		for (const host of hosts) {
 			const list = byHost.get(host.id);
-			if (list?.length) groups.push({ label: host.label, credentials: list });
+			if (list?.length) {
+				const dot = host.hostname?.indexOf('.') ?? -1;
+				groups.push({
+					label: host.label,
+					domainHint: dot > -1 ? host.hostname!.slice(dot + 1) : '',
+					credentials: list
+				});
+			}
 		}
-		if (unassigned.length > 0) groups.push({ label: 'Unassigned', credentials: unassigned });
+		if (unassigned.length > 0) groups.push({ label: 'Unassigned', domainHint: '', credentials: unassigned });
 		return groups;
 	});
 
@@ -159,17 +166,6 @@
 		const tried = new Set((usageByCredential[credentialId] ?? []).map((u) => u.host_id));
 		return hosts.filter((h) => !tried.has(h.id));
 	}
-
-	// Falls back to a domain-shaped hint derived from the source host's hostname
-	// (e.g. dc01.acme.local -> acme.local) when no domain was typed explicitly --
-	// credentials are already grouped by host, so a separate mandatory domain
-	// field is often redundant with what the host record already implies.
-	function hostDomainHint(sourceHostId: string | null): string {
-		if (!sourceHostId) return '';
-		const host = hosts.find((h) => h.id === sourceHostId);
-		const dot = host?.hostname?.indexOf('.') ?? -1;
-		return dot > -1 ? host!.hostname!.slice(dot + 1) : '';
-	}
 </script>
 
 <main>
@@ -259,7 +255,7 @@
 							{#if credential.domain}
 								{credential.domain}
 							{:else}
-								<span class="muted">{hostDomainHint(credential.source_host_id)}</span>
+								<span class="muted">{group.domainHint}</span>
 							{/if}
 						</td>
 						<td>{credential.secret_type}</td>

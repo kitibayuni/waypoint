@@ -109,7 +109,11 @@
 
 	onMount(load);
 
-	async function saveGeneral() {
+	// General/login-notes/foothold all replace the same full host record --
+	// the backend has one PUT, not a field-level PATCH -- so every "Save"
+	// button on this page shares this one call, differing only in which
+	// error message to show if it fails.
+	async function saveHost(failMessage: string) {
 		try {
 			host = await updateHost(hostId, {
 				label: labelDraft,
@@ -124,45 +128,7 @@
 			});
 			error = '';
 		} catch {
-			error = 'Failed to save host.';
-		}
-	}
-
-	async function saveLoginNotes() {
-		try {
-			host = await updateHost(hostId, {
-				label: labelDraft,
-				hostname: hostnameDraft || null,
-				os: osDraft || null,
-				os_family: osFamilyDraft || null,
-				criticality: criticalityDraft || null,
-				status: statusDraft,
-				general_info_md: notesDraft,
-				login_notes_md: loginNotesDraft,
-				is_foothold: isFootholdDraft
-			});
-			error = '';
-		} catch {
-			error = 'Failed to save login procedure notes.';
-		}
-	}
-
-	async function saveFoothold() {
-		try {
-			host = await updateHost(hostId, {
-				label: labelDraft,
-				hostname: hostnameDraft || null,
-				os: osDraft || null,
-				os_family: osFamilyDraft || null,
-				criticality: criticalityDraft || null,
-				status: statusDraft,
-				general_info_md: notesDraft,
-				login_notes_md: loginNotesDraft,
-				is_foothold: isFootholdDraft
-			});
-			error = '';
-		} catch {
-			error = 'Failed to save foothold status.';
+			error = failMessage;
 		}
 	}
 
@@ -346,7 +312,7 @@
 					General notes
 					<textarea bind:value={notesDraft} rows="6"></textarea>
 				</label>
-				<button onclick={saveGeneral}>Save</button>
+				<button onclick={() => saveHost('Failed to save host.')}>Save</button>
 
 				<h2>IP addresses</h2>
 				<ul class="chips">
@@ -423,13 +389,13 @@
 					<input type="checkbox" bind:checked={isFootholdDraft} />
 					Mark this host as the foothold / initial access point
 				</label>
-				<button onclick={saveFoothold}>Save</button>
+				<button onclick={() => saveHost('Failed to save foothold status.')}>Save</button>
 
 				<h2>Login procedure notes</h2>
 				<label>
 					<textarea bind:value={loginNotesDraft} rows="8"></textarea>
 				</label>
-				<button onclick={saveLoginNotes}>Save</button>
+				<button onclick={() => saveHost('Failed to save login procedure notes.')}>Save</button>
 			</section>
 		{:else if activeTab === 'services'}
 			<section>
