@@ -68,99 +68,106 @@
 	{#if loading}
 		<p>Loading dashboard…</p>
 	{:else if dashboard}
-		<div class="kpi-row">
-			<div class="stat-tile">
-				<span class="stat-value">{totalOf(dashboard.hosts_by_status)}</span>
-				<span class="stat-label">Hosts</span>
-			</div>
-			<div class="stat-tile">
-				<span class="stat-value">{dashboard.scope_count}</span>
-				<span class="stat-label">Scope items</span>
-			</div>
-			<div class="stat-tile">
-				<span class="stat-value">{dashboard.credentials.total}</span>
-				<span class="stat-label">Credentials</span>
-				<span class="stat-sub"
-					>{dashboard.credentials.validated} validated · {dashboard.credentials.reused} reused</span
-				>
-			</div>
-			<div class="stat-tile">
-				<span class="stat-value">{totalOf(dashboard.findings_by_severity)}</span>
-				<span class="stat-label">Findings</span>
-			</div>
-			<div class="stat-tile">
-				{#if dashboard.engagement.days_remaining !== null}
-					<span class="stat-value">{dashboard.engagement.days_remaining}</span>
-					<span class="stat-label">Days remaining</span>
-				{:else if dashboard.engagement.days_elapsed !== null}
-					<span class="stat-value">{dashboard.engagement.days_elapsed}</span>
-					<span class="stat-label">Days elapsed</span>
-				{:else}
-					<span class="stat-value">—</span>
-					<span class="stat-label">No timeline set</span>
-				{/if}
-			</div>
-		</div>
-
-		<div class="panels">
-			<section class="panel">
-				<h3>Checklist completion</h3>
-				<div class="meter" role="meter" aria-valuenow={dashboard.checklist.completion_pct} aria-valuemin="0" aria-valuemax="100">
-					<div class="meter-fill" style="width: {dashboard.checklist.completion_pct}%"></div>
-				</div>
-				<p class="meter-label">
-					{dashboard.checklist.completion_pct}% ({dashboard.checklist.done + dashboard.checklist.na} of
-					{dashboard.checklist.total} items done or n/a)
-				</p>
-			</section>
-
-			<section class="panel">
-				<h3>Hosts by status</h3>
-				{#each HOST_STAGES as stage (stage)}
-					{@const count = dashboard.hosts_by_status[stage] ?? 0}
-					{@const max = maxOf(dashboard.hosts_by_status) || 1}
-					<div class="bar-row">
-						<span class="bar-label">{stage}</span>
-						<div class="bar-track">
-							<div
-								class="bar-fill"
-								style="width: {(count / max) * 100}%; background: {ORDINAL_RAMP[stage]}"
-							></div>
-						</div>
-						<span class="bar-count">{count}</span>
-					</div>
-				{/each}
-			</section>
-
-			<section class="panel">
-				<h3>Findings by severity</h3>
-				{#each SEVERITY_ORDER as severity (severity)}
-					{@const count = dashboard.findings_by_severity[severity] ?? 0}
-					{@const max = maxOf(dashboard.findings_by_severity) || 1}
-					<div class="bar-row">
-						<span
-							class="status-dot"
-							style="background: {SEVERITY_STATUS[severity].color}"
-							aria-hidden="true"
-						></span>
-						<span class="bar-label">{severity}</span>
-						<div class="bar-track">
-							<div
-								class="bar-fill"
-								style="width: {(count / max) * 100}%; background: {SEVERITY_STATUS[severity].color}"
-							></div>
-						</div>
-						<span class="bar-count">{count}</span>
-					</div>
-				{/each}
-			</section>
-
+		<div class="dashboard-grid">
 			<section class="panel graph-panel">
 				<h3>Attack graph</h3>
 				<div class="mini-graph">
-					<AttackGraph elements={graphElements} compact interactive={false} />
+					<AttackGraph
+						elements={graphElements}
+						compact
+						interactive={false}
+						positions={{ engagementId }}
+					/>
 				</div>
 			</section>
+
+			<div class="side-stack">
+				<div class="kpi-row">
+					<div class="stat-tile">
+						<span class="stat-value">{totalOf(dashboard.hosts_by_status)}</span>
+						<span class="stat-label">Hosts</span>
+					</div>
+					<div class="stat-tile">
+						<span class="stat-value">{dashboard.scope_count}</span>
+						<span class="stat-label">Scope items</span>
+					</div>
+					<div class="stat-tile">
+						<span class="stat-value">{dashboard.credentials.total}</span>
+						<span class="stat-label">Credentials</span>
+						<span class="stat-sub"
+							>{dashboard.credentials.validated} validated · {dashboard.credentials.reused} reused</span
+						>
+					</div>
+					<div class="stat-tile">
+						<span class="stat-value">{totalOf(dashboard.findings_by_severity)}</span>
+						<span class="stat-label">Findings</span>
+					</div>
+					<div class="stat-tile">
+						{#if dashboard.engagement.days_remaining !== null}
+							<span class="stat-value">{dashboard.engagement.days_remaining}</span>
+							<span class="stat-label">Days remaining</span>
+						{:else if dashboard.engagement.days_elapsed !== null}
+							<span class="stat-value">{dashboard.engagement.days_elapsed}</span>
+							<span class="stat-label">Days elapsed</span>
+						{:else}
+							<span class="stat-value">—</span>
+							<span class="stat-label">No timeline set</span>
+						{/if}
+					</div>
+				</div>
+
+				<section class="panel">
+					<h3>Checklist completion</h3>
+					<div class="meter" role="meter" aria-valuenow={dashboard.checklist.completion_pct} aria-valuemin="0" aria-valuemax="100">
+						<div class="meter-fill" style="width: {dashboard.checklist.completion_pct}%"></div>
+					</div>
+					<p class="meter-label">
+						{dashboard.checklist.completion_pct}% ({dashboard.checklist.done + dashboard.checklist.na} of
+						{dashboard.checklist.total} items done or n/a)
+					</p>
+				</section>
+
+				<section class="panel">
+					<h3>Hosts by status</h3>
+					{#each HOST_STAGES as stage (stage)}
+						{@const count = dashboard.hosts_by_status[stage] ?? 0}
+						{@const max = maxOf(dashboard.hosts_by_status) || 1}
+						<div class="bar-row">
+							<span class="bar-label">{stage}</span>
+							<div class="bar-track">
+								<div
+									class="bar-fill"
+									style="width: {(count / max) * 100}%; background: {ORDINAL_RAMP[stage]}"
+								></div>
+							</div>
+							<span class="bar-count">{count}</span>
+						</div>
+					{/each}
+				</section>
+
+				<section class="panel">
+					<h3>Findings by severity</h3>
+					{#each SEVERITY_ORDER as severity (severity)}
+						{@const count = dashboard.findings_by_severity[severity] ?? 0}
+						{@const max = maxOf(dashboard.findings_by_severity) || 1}
+						<div class="bar-row">
+							<span
+								class="status-dot"
+								style="background: {SEVERITY_STATUS[severity].color}"
+								aria-hidden="true"
+							></span>
+							<span class="bar-label">{severity}</span>
+							<div class="bar-track">
+								<div
+									class="bar-fill"
+									style="width: {(count / max) * 100}%; background: {SEVERITY_STATUS[severity].color}"
+								></div>
+							</div>
+							<span class="bar-count">{count}</span>
+						</div>
+					{/each}
+				</section>
+			</div>
 		</div>
 	{/if}
 </div>
@@ -183,7 +190,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 		gap: 0.75rem;
-		margin-bottom: 1.5rem;
 	}
 	.stat-tile {
 		background: var(--surface-1);
@@ -208,10 +214,21 @@
 		font-size: 0.72rem;
 		color: var(--muted);
 	}
-	.panels {
+	.dashboard-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
 		gap: 1rem;
+		align-items: start;
+	}
+	.side-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	@media (max-width: 900px) {
+		.dashboard-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 	.panel {
 		border: 1px solid var(--gridline);
@@ -274,13 +291,10 @@
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
-	.graph-panel {
-		grid-column: 1 / -1;
-	}
 	.mini-graph {
 		/* AttackGraph's own .graph-container supplies the border/background/
 		   radius; this wrapper only needs to give it a definite height to
 		   fill (see AttackGraph.svelte's height: 100% comment). */
-		height: 14rem;
+		height: 28rem;
 	}
 </style>

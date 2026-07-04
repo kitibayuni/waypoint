@@ -139,92 +139,98 @@
 
 		<Dashboard {engagementId} />
 
-		<section>
-			<h2>Global notes</h2>
-			<textarea bind:value={notesDraft} rows="8"></textarea>
-			<button onclick={saveNotes}>Save notes</button>
-		</section>
+		<div class="compact-sections">
+			<section>
+				<h2>Global notes</h2>
+				<textarea bind:value={notesDraft} rows="4"></textarea>
+				<button onclick={saveNotes}>Save notes</button>
+			</section>
 
-		<section>
-			<h2>Scope</h2>
-			<table>
-				<thead>
-					<tr>
-						<th>Kind</th>
-						<th>Value</th>
-						<th>In scope</th>
-						<th>Note</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each scopeItems as item (item.id)}
-						<tr>
-							<td>{item.kind}</td>
-							<td>{item.value}</td>
-							<td>{item.in_scope ? 'yes' : 'no'}</td>
-							<td>{item.note ?? ''}</td>
-							<td><button onclick={() => handleDeleteScope(item.id)}>Remove</button></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-			<form onsubmit={handleAddScope}>
-				<select bind:value={newScopeKind}>
-					<option value="ip">IP</option>
-					<option value="cidr">CIDR</option>
-					<option value="domain">Domain</option>
-					<option value="url">URL</option>
-					<option value="asn">ASN</option>
-					<option value="exclusion">Exclusion</option>
-				</select>
-				<input bind:value={newScopeValue} placeholder="e.g. 10.10.10.0/24" required />
-				<button type="submit">Add scope item</button>
-			</form>
-		</section>
+			<section>
+				<h2>Scope</h2>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr>
+								<th>Kind</th>
+								<th>Value</th>
+								<th>In scope</th>
+								<th>Note</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each scopeItems as item (item.id)}
+								<tr>
+									<td>{item.kind}</td>
+									<td>{item.value}</td>
+									<td>{item.in_scope ? 'yes' : 'no'}</td>
+									<td>{item.note ?? ''}</td>
+									<td><button onclick={() => handleDeleteScope(item.id)}>Remove</button></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<form onsubmit={handleAddScope}>
+					<select bind:value={newScopeKind}>
+						<option value="ip">IP</option>
+						<option value="cidr">CIDR</option>
+						<option value="domain">Domain</option>
+						<option value="url">URL</option>
+						<option value="asn">ASN</option>
+						<option value="exclusion">Exclusion</option>
+					</select>
+					<input bind:value={newScopeValue} placeholder="e.g. 10.10.10.0/24" required />
+					<button type="submit">Add scope item</button>
+				</form>
+			</section>
 
-		<section>
-			<h2>Team members</h2>
-			<table>
-				<thead>
-					<tr>
-						<th>Name</th>
-						<th>Email</th>
-						<th>Role</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each members as member (member.user_id)}
-						<tr>
-							<td>{member.display_name}</td>
-							<td>{member.email}</td>
-							<td>
-								<select
-									value={member.role}
-									onchange={(e) =>
-										handleRoleChange(member.user_id, (e.target as HTMLSelectElement).value)}
-								>
-									<option value="viewer">viewer</option>
-									<option value="tester">tester</option>
-									<option value="lead">lead</option>
-								</select>
-							</td>
-							<td><button onclick={() => handleRemoveMember(member.user_id)}>Remove</button></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-			<form onsubmit={handleAddMember}>
-				<input type="email" bind:value={newMemberEmail} placeholder="user@example.com" required />
-				<select bind:value={newMemberRole}>
-					<option value="viewer">viewer</option>
-					<option value="tester">tester</option>
-					<option value="lead">lead</option>
-				</select>
-				<button type="submit">Add member</button>
-			</form>
-		</section>
+			<section>
+				<h2>Team members</h2>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Email</th>
+								<th>Role</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each members as member (member.user_id)}
+								<tr>
+									<td>{member.display_name}</td>
+									<td>{member.email}</td>
+									<td>
+										<select
+											value={member.role}
+											onchange={(e) =>
+												handleRoleChange(member.user_id, (e.target as HTMLSelectElement).value)}
+										>
+											<option value="viewer">viewer</option>
+											<option value="tester">tester</option>
+											<option value="lead">lead</option>
+										</select>
+									</td>
+									<td><button onclick={() => handleRemoveMember(member.user_id)}>Remove</button></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<form onsubmit={handleAddMember}>
+					<input type="email" bind:value={newMemberEmail} placeholder="user@example.com" required />
+					<select bind:value={newMemberRole}>
+						<option value="viewer">viewer</option>
+						<option value="tester">tester</option>
+						<option value="lead">lead</option>
+					</select>
+					<button type="submit">Add member</button>
+				</form>
+			</section>
+		</div>
 	{/if}
 </main>
 
@@ -236,18 +242,36 @@
 		color: var(--text-muted);
 		margin-bottom: 1rem;
 	}
-	section {
-		margin-top: 2rem;
+	.compact-sections {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		gap: 1rem;
+		margin-top: 1.5rem;
+		align-items: start;
+	}
+	.compact-sections section {
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 0.75rem;
+	}
+	.compact-sections h2 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+	}
+	.table-scroll {
+		max-height: 14rem;
+		overflow-y: auto;
+		margin-bottom: 0.5rem;
 	}
 	table {
 		border-collapse: collapse;
 		width: 100%;
-		margin-bottom: 1rem;
+		font-size: 0.85rem;
 	}
 	th,
 	td {
 		text-align: left;
-		padding: 0.4rem 0.6rem;
+		padding: 0.3rem 0.5rem;
 		border-bottom: 1px solid var(--border);
 	}
 	form {
@@ -259,5 +283,7 @@
 	textarea {
 		width: 100%;
 		font-family: inherit;
+		margin-bottom: 0.5rem;
+		box-sizing: border-box;
 	}
 </style>
