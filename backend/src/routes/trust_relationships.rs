@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::state::AppState;
@@ -106,6 +107,17 @@ async fn create_trust(
         .fetch_one(&state.pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    log_action(
+        &state.pool,
+        user.id,
+        "create",
+        "trust_relationship",
+        id,
+        None::<&TrustRelationship>,
+        Some(&trust),
+    )
+    .await;
 
     Ok(Json(trust))
 }

@@ -2,13 +2,17 @@
 	import { onDestroy } from 'svelte';
 	import cytoscape from 'cytoscape';
 	import type { Core, ElementDefinition } from 'cytoscape';
+	import edgehandles from 'cytoscape-edgehandles';
 	import { listNodePositions, putNodePositions } from '$lib/api/node_positions';
+
+	cytoscape.use(edgehandles);
 
 	let {
 		elements,
 		onHostDblClick,
 		onNodeSelect,
 		onContextMenu,
+		onEdgeCreate,
 		compact = false,
 		interactive = true,
 		positions
@@ -26,6 +30,8 @@
 			target: 'background' | 'host' | 'credential';
 			nodeId?: string;
 		}) => void;
+		/** Fires after dragging from one host to another via the edgehandles handle. */
+		onEdgeCreate?: (info: { fromHostId: string; toHostId: string; x: number; y: number }) => void;
 		/** Smaller fonts/padding and tighter layout spacing, for the Dashboard mini-graph panel. */
 		compact?: boolean;
 		/** Set false to disable zoom/pan/box-selection, e.g. for a read-only overview panel. */
@@ -51,6 +57,7 @@
 	let flushTimer: ReturnType<typeof setTimeout> | null = null;
 	let resizeObserver: ResizeObserver | null = null;
 	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+	let eh: ReturnType<Core['edgehandles']> | null = null;
 
 	function buildStyle(): any[] {
 		const styles: any[] = [
@@ -276,6 +283,8 @@
 		cy?.destroy();
 		resizeObserver?.disconnect();
 		resizeObserver = null;
+		eh?.destroy();
+		eh = null;
 
 		const engId = positions?.engagementId;
 		let preparedElements = elements;
@@ -368,6 +377,28 @@
 			});
 		}
 
+		if (onEdgeCreate) {
+			eh = core.edgehandles({
+				canConnect: (source, target) =>
+					source.data('type') === 'host' && target.data('type') === 'host' && source.id() !== target.id(),
+				hoverDelay: 0
+			});
+			// edgehandles adds a real (placeholder) edge on completion -- the canonical
+			// edge only exists once the relationship pop-up's API call + graph reload
+			// succeed, so remove the placeholder immediately rather than let it linger.
+			core.on('ehcomplete', (_evt, sourceNode, targetNode, addedEdge) => {
+				addedEdge.remove();
+				const rect = container.getBoundingClientRect();
+				const pos = targetNode.renderedPosition();
+				onEdgeCreate({
+					fromHostId: (sourceNode.id() as string).replace(/^host:/, ''),
+					toHostId: (targetNode.id() as string).replace(/^host:/, ''),
+					x: rect.left + pos.x,
+					y: rect.top + pos.y
+				});
+			});
+		}
+
 		if (engId) {
 			// The construction above already ran the layout synchronously (animate is
 			// always false). cose's force simulation can still nudge already-known
@@ -416,6 +447,7 @@
 		}
 		if (resizeTimer) clearTimeout(resizeTimer);
 		resizeObserver?.disconnect();
+		eh?.destroy();
 		cy?.destroy();
 	});
 </script>

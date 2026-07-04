@@ -10,6 +10,7 @@
 	import AttackGraph from '$lib/components/AttackGraph.svelte';
 	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
 	import GraphContextMenu from '$lib/components/GraphContextMenu.svelte';
+	import RelationshipPopup from '$lib/components/RelationshipPopup.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -23,6 +24,12 @@
 		y: number;
 		target: 'background' | 'host' | 'credential';
 		nodeId?: string;
+	} | null>(null);
+	let relationshipDraft = $state<{
+		fromHostId: string;
+		toHostId: string;
+		x: number;
+		y: number;
 	} | null>(null);
 
 	let showNewHostForm = $state(false);
@@ -148,6 +155,7 @@
 				onHostDblClick={handleHostDblClick}
 				onNodeSelect={(s) => (selected = s)}
 				onContextMenu={(info) => (contextMenu = info)}
+				onEdgeCreate={(info) => (relationshipDraft = info)}
 				positions={{ engagementId, persist: true }}
 			/>
 		{/if}
@@ -167,6 +175,15 @@
 			info={contextMenu}
 			{engagementId}
 			onClose={() => (contextMenu = null)}
+			onChanged={load}
+		/>
+	{/if}
+
+	{#if relationshipDraft}
+		<RelationshipPopup
+			info={relationshipDraft}
+			{engagementId}
+			onClose={() => (relationshipDraft = null)}
 			onChanged={load}
 		/>
 	{/if}
