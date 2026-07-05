@@ -89,6 +89,52 @@ async fn list_host_checklists(
     Ok(Json(checklists))
 }
 
+/// The checklist a specific service "owns" isn't a direct FK -- it's whichever
+/// checklist on the service's host was auto-instantiated from the template
+/// mapped to that service's name (see `routes::services::maybe_auto_checklist`).
+/// Mirrors that same lookup in reverse so the attack-graph side panel can show
+/// and act on it exactly as the host's Checklists tab would.
+async fn get_service_checklist(
+    State(state): State<AppState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(service_id): Path<Uuid>,
+) -> Result<Json<Checklist>, StatusCode> {
+    let (host_id, name): (Uuid, Option<String>) = sqlx::query_as(
+        "SELECT host_id, name FROM services WHERE id = $1",
+    )
+    .bind(service_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let engagement_id = host_engagement_id(&state.pool, host_id).await?;
+    require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
+
+    let name = name.ok_or(StatusCode::NOT_FOUND)?;
+
+    let template_id: (Uuid,) = sqlx::query_as(
+        "SELECT template_id FROM service_checklist_templates WHERE service_name = $1",
+    )
+    .bind(&name)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let checklist = sqlx::query_as::<_, Checklist>(&format!(
+        "{CHECKLIST_SELECT} WHERE c.host_id = $1 AND c.template_origin_id = $2 GROUP BY c.id"
+    ))
+    .bind(host_id)
+    .bind(template_id.0)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(checklist))
+}
+
 #[derive(Deserialize)]
 pub struct UpdateChecklistItemRequest {
     state: String,
@@ -127,6 +173,7 @@ async fn update_checklist_item(
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/hosts/{host_id}/checklists", get(list_host_checklists))
+        .route("/services/{service_id}/checklist", get(get_service_checklist))
         .route("/checklist-items/{id}", axum::routing::put(update_checklist_item))
 }
 

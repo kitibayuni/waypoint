@@ -112,6 +112,7 @@
 				style: {
 					shape: 'ellipse',
 					'background-color': '#7a5ca0',
+					'background-opacity': 0.55,
 					'font-size': compact ? '6px' : '8px',
 					padding: compact ? '4px' : '6px'
 				}
@@ -387,7 +388,7 @@
 				n.addClass('selected');
 				selectedId = n.id();
 				onNodeSelect({
-					id: (n.id() as string).replace(/^(host|credential):/, ''),
+					id: (n.id() as string).replace(/^(host|credential|service):/, ''),
 					type: n.data('type'),
 					data: n.data()
 				});

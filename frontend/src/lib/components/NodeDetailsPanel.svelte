@@ -4,6 +4,9 @@
 	import { getCredential, revealCredential } from '$lib/api/credentials';
 	import type { Credential } from '$lib/api/credentials';
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
+	import { getServiceChecklist } from '$lib/api/checklists';
+	import type { Checklist } from '$lib/api/checklists';
+	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
 
 	let {
 		selection,
@@ -20,6 +23,7 @@
 	let panelEl = $state<HTMLElement>();
 	let host = $state<Host | null>(null);
 	let credential = $state<Credential | null>(null);
+	let serviceChecklist = $state<Checklist | null>(null);
 	let loading = $state(false);
 	let error = $state('');
 	let revealedSecret = $state('');
@@ -32,6 +36,7 @@
 	async function load() {
 		host = null;
 		credential = null;
+		serviceChecklist = null;
 		revealedSecret = '';
 		error = '';
 		if (!selection) return;
@@ -41,6 +46,10 @@
 				host = await getHost(selection.id);
 			} else if (selection.type === 'credential') {
 				credential = await getCredential(selection.id);
+			} else if (selection.type === 'service') {
+				// A 404 here just means this service's type has no mapped checklist
+				// template (or none instantiated yet) -- an expected, non-error state.
+				serviceChecklist = await getServiceChecklist(selection.id).catch(() => null);
 			}
 		} catch {
 			error = 'Failed to load details.';
@@ -235,6 +244,15 @@
 						Open host's Services tab &rarr;
 					</a>
 				</p>
+			{/if}
+
+			{#if serviceChecklist}
+				<ChecklistPanel
+					checklist={serviceChecklist}
+					onchange={(updated) => (serviceChecklist = updated)}
+				/>
+			{:else}
+				<p class="muted">No checklist for this service.</p>
 			{/if}
 		{/if}
 	</aside>

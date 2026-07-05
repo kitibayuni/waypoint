@@ -21,6 +21,11 @@ export function listHostChecklists(hostId: string): Promise<Checklist[]> {
 	return apiGet(`/api/hosts/${hostId}/checklists`);
 }
 
+/** Throws (404) if this service's type has no mapped checklist template, or none has been instantiated yet. */
+export function getServiceChecklist(serviceId: string): Promise<Checklist> {
+	return apiGet(`/api/services/${serviceId}/checklist`);
+}
+
 export function updateChecklistItem(
 	itemId: string,
 	state: string,
