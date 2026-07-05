@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_ROLES: [&str; 3] = ["viewer", "tester", "lead"];
@@ -52,7 +53,7 @@ async fn list_members(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(members))
 }
@@ -73,8 +74,8 @@ async fn add_member(
         .bind(&payload.email)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let target_id = target.ok_or(StatusCode::NOT_FOUND)?.0;
+        .internal()?;
+    let target_id = target.or_404()?.0;
 
     sqlx::query(
         "INSERT INTO engagement_members (engagement_id, user_id, role)
@@ -97,7 +98,7 @@ async fn add_member(
     .bind(target_id)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(member))
 }
@@ -123,7 +124,7 @@ async fn update_member_role(
     .bind(target_user_id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -136,7 +137,7 @@ async fn update_member_role(
     .bind(target_user_id)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(member))
 }
@@ -155,7 +156,7 @@ async fn remove_member(
     .bind(target_user_id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

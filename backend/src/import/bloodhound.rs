@@ -66,12 +66,12 @@ pub fn parse(json: &str) -> Result<ParsedImport, String> {
             sid_to_label.insert(sid.clone(), label.clone());
         }
 
-        if let (Some(to_sid), Some(sessions)) = (&computer.object_identifier, &computer.sessions) {
-            if let Some(results) = &sessions.results {
-                for edge in results {
-                    if let Some(from_sid) = &edge.computer_sid {
-                        pending_sessions.push((from_sid.clone(), to_sid.clone()));
-                    }
+        if let (Some(to_sid), Some(sessions)) = (&computer.object_identifier, &computer.sessions)
+            && let Some(results) = &sessions.results
+        {
+            for edge in results {
+                if let Some(from_sid) = &edge.computer_sid {
+                    pending_sessions.push((from_sid.clone(), to_sid.clone()));
                 }
             }
         }

@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, ResultExt};
 use crate::routes::credentials::credential_engagement_id;
 use crate::state::AppState;
 
@@ -71,7 +72,7 @@ async fn list_usage(
     .bind(credential_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(usage))
 }
@@ -88,10 +89,10 @@ async fn create_usage(
     if !valid_result(&payload.result) {
         return Err(StatusCode::BAD_REQUEST);
     }
-    if let Some(p) = &payload.privilege {
-        if !valid_privilege(p) {
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if let Some(p) = &payload.privilege
+        && !valid_privilege(p)
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
 
     let (id,): (Uuid,) = sqlx::query_as(
@@ -107,13 +108,13 @@ async fn create_usage(
     .bind(&payload.privilege)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let usage = sqlx::query_as::<_, CredentialUsage>(&format!("{USAGE_SELECT} WHERE cu.id = $1"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(usage))
 }
@@ -130,10 +131,10 @@ async fn update_usage(
     if !valid_result(&payload.result) {
         return Err(StatusCode::BAD_REQUEST);
     }
-    if let Some(p) = &payload.privilege {
-        if !valid_privilege(p) {
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if let Some(p) = &payload.privilege
+        && !valid_privilege(p)
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
 
     let result = sqlx::query(
@@ -146,7 +147,7 @@ async fn update_usage(
     .bind(id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -156,7 +157,7 @@ async fn update_usage(
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(usage))
 }
@@ -173,7 +174,7 @@ async fn delete_usage(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
@@ -183,16 +184,13 @@ async fn delete_usage(
 }
 
 async fn usage_engagement_id(pool: &sqlx::PgPool, usage_id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>(
+    scoped_engagement_id(
+        pool,
         "SELECT c.engagement_id FROM credential_usage cu
          JOIN credentials c ON c.id = cu.credential_id WHERE cu.id = $1",
+        usage_id,
     )
-    .bind(usage_id)
-    .fetch_optional(pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .map(|(id,)| id)
-    .ok_or(StatusCode::NOT_FOUND)
 }
 
 pub fn router() -> Router<AppState> {

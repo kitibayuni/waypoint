@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -40,7 +41,7 @@ async fn list_clients(State(state): State<AppState>) -> Result<Json<Vec<Client>>
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     Ok(Json(clients))
 }
 
@@ -58,7 +59,7 @@ async fn create_client(
     .bind(&payload.notes)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     Ok(Json(client))
 }
 
@@ -72,8 +73,8 @@ async fn get_client(
     .bind(id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
     Ok(Json(client))
 }
 
@@ -93,8 +94,8 @@ async fn update_client(
     .bind(id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
     Ok(Json(client))
 }
 

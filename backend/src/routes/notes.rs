@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, ResultExt};
 use crate::state::AppState;
 use crate::subject_types::NOTE_SUBJECT_TYPES;
 
@@ -16,13 +17,7 @@ fn valid_subject_type(s: &str) -> bool {
 }
 
 async fn note_engagement_id(pool: &PgPool, id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>("SELECT engagement_id FROM notes WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(|(id,)| id)
-        .ok_or(StatusCode::NOT_FOUND)
+    scoped_engagement_id(pool, "SELECT engagement_id FROM notes WHERE id = $1", id).await
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -82,7 +77,7 @@ async fn list_notes(
     .bind(q.subject_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(notes))
 }
@@ -109,13 +104,13 @@ async fn create_note(
     .bind(user.id)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let note = sqlx::query_as::<_, Note>(&format!("{NOTE_SELECT} WHERE id = $1"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(note))
 }
@@ -135,7 +130,7 @@ async fn update_note(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -145,7 +140,7 @@ async fn update_note(
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(note))
 }
@@ -162,7 +157,7 @@ async fn delete_note(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

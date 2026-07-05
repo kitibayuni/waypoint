@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_STATUSES: [&str; 4] = ["planning", "active", "reporting", "closed"];
@@ -79,7 +80,7 @@ async fn list_engagements(
         .fetch_all(&state.pool)
         .await
     }
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(engagements))
 }
@@ -97,7 +98,7 @@ async fn create_engagement(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let (new_id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO engagements (client_id, name, status, start_date, end_date, global_notes_md, created_by)
@@ -113,7 +114,7 @@ async fn create_engagement(
     .bind(user.id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     sqlx::query(
         "INSERT INTO engagement_members (engagement_id, user_id, role) VALUES ($1, $2, 'lead')",
@@ -122,18 +123,18 @@ async fn create_engagement(
     .bind(user.id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let engagement =
         sqlx::query_as::<_, Engagement>(&format!("{ENGAGEMENT_SELECT} WHERE e.id = $1"))
             .bind(new_id)
             .fetch_one(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
 
     Ok(Json(engagement))
 }
@@ -150,8 +151,8 @@ async fn get_engagement(
             .bind(id)
             .fetch_optional(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .ok_or(StatusCode::NOT_FOUND)?;
+            .internal()?
+            .or_404()?;
 
     Ok(Json(engagement))
 }
@@ -180,7 +181,7 @@ async fn update_engagement(
     .bind(id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -191,7 +192,7 @@ async fn update_engagement(
             .bind(id)
             .fetch_one(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
 
     Ok(Json(engagement))
 }
@@ -207,7 +208,7 @@ async fn delete_engagement(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

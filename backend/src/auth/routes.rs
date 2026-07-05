@@ -6,6 +6,7 @@ use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 use time::Duration as CookieDuration;
 
+use crate::http_error::ResultExt;
 use crate::state::AppState;
 
 use super::password::verify_password;
@@ -38,7 +39,7 @@ pub async fn login(
     .bind(&payload.email)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .internal()?
     .ok_or(StatusCode::UNAUTHORIZED)?;
 
     if !verify_password(&payload.password, &row.password_hash) {
@@ -47,7 +48,7 @@ pub async fn login(
 
     let session = create_session(&state.pool, row.id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let max_age =
         CookieDuration::seconds((session.expires_at - chrono::Utc::now()).num_seconds().max(0));

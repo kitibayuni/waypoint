@@ -4,6 +4,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
 
+use crate::routes::common::ResultExt;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -24,7 +25,7 @@ async fn list_mitre_techniques(
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(techniques))
 }

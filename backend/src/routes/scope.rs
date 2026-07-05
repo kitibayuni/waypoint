@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_KINDS: [&str; 6] = ["ip", "cidr", "domain", "url", "asn", "exclusion"];
@@ -54,7 +55,7 @@ async fn list_scope(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(items))
 }
@@ -83,7 +84,7 @@ async fn create_scope_item(
     .bind(&payload.note)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(item))
 }
@@ -113,8 +114,8 @@ async fn update_scope_item(
     .bind(engagement_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     Ok(Json(item))
 }
@@ -131,7 +132,7 @@ async fn delete_scope_item(
         .bind(engagement_id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

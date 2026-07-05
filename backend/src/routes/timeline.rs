@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::ResultExt;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -47,7 +48,7 @@ async fn get_timeline(
     .bind(query.until)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(events))
 }

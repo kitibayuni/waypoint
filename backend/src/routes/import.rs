@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::import::{self, ParsedHost, ParsedImport};
+use crate::routes::common::ResultExt;
 use crate::routes::services::maybe_auto_checklist;
 use crate::state::AppState;
 
@@ -55,10 +56,10 @@ fn match_host(
     hostname_map: &HashMap<String, Uuid>,
     address_map: &HashMap<String, Uuid>,
 ) -> Option<Uuid> {
-    if let Some(h) = &parsed.hostname {
-        if let Some(id) = hostname_map.get(&h.to_lowercase()) {
-            return Some(*id);
-        }
+    if let Some(h) = &parsed.hostname
+        && let Some(id) = hostname_map.get(&h.to_lowercase())
+    {
+        return Some(*id);
     }
     for addr in &parsed.addresses {
         if let Some(id) = address_map.get(addr) {
@@ -101,7 +102,7 @@ async fn preview_import(
             .bind(engagement_id)
             .fetch_all(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     let hostname_map: HashMap<String, Uuid> = hostname_rows
         .into_iter()
         .filter_map(|(id, h)| h.map(|h| (h.to_lowercase(), id)))
@@ -114,7 +115,7 @@ async fn preview_import(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     let address_map: HashMap<String, Uuid> =
         address_rows.into_iter().map(|(id, ip)| (ip, id)).collect();
 
@@ -165,14 +166,14 @@ async fn commit_import(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let hostname_rows: Vec<(Uuid, Option<String>)> =
         sqlx::query_as("SELECT id, hostname FROM hosts WHERE engagement_id = $1")
             .bind(engagement_id)
             .fetch_all(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     let mut hostname_map: HashMap<String, Uuid> = hostname_rows
         .into_iter()
         .filter_map(|(id, h)| h.map(|h| (h.to_lowercase(), id)))
@@ -185,7 +186,7 @@ async fn commit_import(
     .bind(engagement_id)
     .fetch_all(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     let mut address_map: HashMap<String, Uuid> =
         address_rows.into_iter().map(|(id, ip)| (ip, id)).collect();
 
@@ -204,7 +205,7 @@ async fn commit_import(
                 .bind(id)
                 .execute(&mut *tx)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .internal()?;
             merged_hosts += 1;
             id
         } else {
@@ -217,7 +218,7 @@ async fn commit_import(
             .bind(&h.os)
             .fetch_one(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
             created_hosts += 1;
             if let Some(hn) = &h.hostname {
                 hostname_map.insert(hn.to_lowercase(), new_id);
@@ -238,7 +239,7 @@ async fn commit_import(
                     .bind(is_primary)
                     .execute(&mut *tx)
                     .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    .internal()?;
                 address_map.insert(addr.clone(), host_id);
             }
         }
@@ -252,7 +253,7 @@ async fn commit_import(
             .bind(&svc.protocol)
             .fetch_optional(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
 
             if exists.is_none() {
                 sqlx::query(
@@ -267,7 +268,7 @@ async fn commit_import(
                 .bind(&svc.version)
                 .execute(&mut *tx)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .internal()?;
                 services_added += 1;
 
                 // Bulk-imported services bypass the one-at-a-time create_service
@@ -297,7 +298,7 @@ async fn commit_import(
         .bind(&f.remediation_md)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
         findings_added += 1;
 
         for label in &f.host_labels {
@@ -309,7 +310,7 @@ async fn commit_import(
                 .bind(host_id)
                 .execute(&mut *tx)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .internal()?;
             }
         }
     }
@@ -330,14 +331,14 @@ async fn commit_import(
             .bind(&t.kind)
             .execute(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
             trust_relationships_added += 1;
         }
     }
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(ImportResult {
         created_hosts,

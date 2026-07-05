@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_STATUSES: [&str; 4] = ["open", "triaged", "accepted_risk", "fixed"];
@@ -24,13 +25,7 @@ fn default_status() -> String {
 }
 
 pub(crate) async fn finding_engagement_id(pool: &PgPool, id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>("SELECT engagement_id FROM findings WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(|(id,)| id)
-        .ok_or(StatusCode::NOT_FOUND)
+    scoped_engagement_id(pool, "SELECT engagement_id FROM findings WHERE id = $1", id).await
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -114,7 +109,7 @@ async fn list_findings(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(findings))
 }
@@ -135,7 +130,7 @@ async fn create_finding(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO findings (engagement_id, title, cve, cvss_vector, cvss_score, severity,
@@ -157,7 +152,7 @@ async fn create_finding(
     .bind(normalize_refs(payload.mitre_technique_ids.clone()))
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     for host_id in &payload.affected_host_ids {
         sqlx::query("INSERT INTO finding_hosts (finding_id, host_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
@@ -165,18 +160,18 @@ async fn create_finding(
             .bind(host_id)
             .execute(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     }
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let finding = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "create", "finding", id, None::<&Finding>, Some(&finding)).await;
 
@@ -195,8 +190,8 @@ async fn get_finding(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     Ok(Json(finding))
 }
@@ -218,14 +213,14 @@ async fn update_finding(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let mut tx = state
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let result = sqlx::query(
         "UPDATE findings SET title = $1, cve = $2, cvss_vector = $3, cvss_score = $4::numeric,
@@ -246,7 +241,7 @@ async fn update_finding(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -256,7 +251,7 @@ async fn update_finding(
         .bind(id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     for host_id in &payload.affected_host_ids {
         sqlx::query("INSERT INTO finding_hosts (finding_id, host_id) VALUES ($1, $2)")
@@ -264,18 +259,18 @@ async fn update_finding(
             .bind(host_id)
             .execute(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     }
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let finding = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "update", "finding", id, Some(&before), Some(&finding)).await;
 
@@ -294,14 +289,14 @@ async fn delete_finding(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let result = sqlx::query("DELETE FROM findings WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -343,7 +338,7 @@ async fn get_finding_history(
     .bind(id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(history))
 }

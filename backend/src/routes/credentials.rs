@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_SECRET_TYPES: [&str; 5] = ["plaintext", "ntlm", "kerb", "ssh_key", "hash_other"];
@@ -31,13 +32,12 @@ pub(crate) async fn credential_engagement_id(
     pool: &PgPool,
     credential_id: Uuid,
 ) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>("SELECT engagement_id FROM credentials WHERE id = $1")
-        .bind(credential_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(|(id,)| id)
-        .ok_or(StatusCode::NOT_FOUND)
+    scoped_engagement_id(
+        pool,
+        "SELECT engagement_id FROM credentials WHERE id = $1",
+        credential_id,
+    )
+    .await
 }
 
 /// Redacted credential shape — never carries the secret. Every list/get
@@ -108,7 +108,7 @@ async fn list_credentials(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(credentials))
 }
@@ -144,13 +144,13 @@ async fn create_credential(
     .bind(&payload.notes_md)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let credential = sqlx::query_as::<_, Credential>(&format!("{CREDENTIAL_SELECT} WHERE id = $1"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     // Credential audit snapshots reuse the already-redacted response type,
     // so the secret is never written to audit_log either.
@@ -171,8 +171,8 @@ async fn get_credential(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     Ok(Json(credential))
 }
@@ -194,8 +194,8 @@ async fn update_credential(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let result = if let Some(secret) = &payload.secret {
         let encrypted = state.cred_cipher.encrypt(secret);
@@ -230,7 +230,7 @@ async fn update_credential(
         .execute(&state.pool)
         .await
     }
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -240,7 +240,7 @@ async fn update_credential(
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "update", "credential", id, Some(&before), Some(&credential)).await;
 
@@ -259,14 +259,14 @@ async fn delete_credential(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let result = sqlx::query("DELETE FROM credentials WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -277,7 +277,7 @@ async fn delete_credential(
         .bind(format!("credential:{id}"))
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "delete", "credential", id, Some(&before), None::<&Credential>).await;
 
@@ -301,13 +301,13 @@ async fn reveal_credential(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let secret = state
         .cred_cipher
         .decrypt(&encrypted)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(RevealResponse { secret }))
 }

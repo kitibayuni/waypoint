@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_STATUSES: [&str; 5] = ["discovered", "enumerating", "exploited", "owned", "cleared"];
@@ -33,13 +34,7 @@ pub(crate) fn db_err_to_status(e: sqlx::Error) -> StatusCode {
 }
 
 pub(crate) async fn host_engagement_id(pool: &PgPool, host_id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>("SELECT engagement_id FROM hosts WHERE id = $1")
-        .bind(host_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(|(id,)| id)
-        .ok_or(StatusCode::NOT_FOUND)
+    scoped_engagement_id(pool, "SELECT engagement_id FROM hosts WHERE id = $1", host_id).await
 }
 
 pub(crate) async fn get_or_create_tag(
@@ -175,7 +170,7 @@ async fn list_hosts(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(hosts))
 }
@@ -196,7 +191,7 @@ async fn create_host(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let (host_id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO hosts (engagement_id, label, hostname, os, os_family, criticality, status, general_info_md, source_service_id)
@@ -214,7 +209,7 @@ async fn create_host(
     .bind(payload.source_service_id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     for (idx, ip) in payload.addresses.iter().enumerate() {
         sqlx::query(
@@ -231,24 +226,24 @@ async fn create_host(
     for tag_name in &payload.tags {
         let tag_id = get_or_create_tag(&state.pool, engagement_id, tag_name)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
         sqlx::query("INSERT INTO host_tags (host_id, tag_id) VALUES ($1, $2)")
             .bind(host_id)
             .bind(tag_id)
             .execute(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     }
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let host = sqlx::query_as::<_, Host>(&format!("{HOST_SELECT} WHERE h.id = $1 GROUP BY h.id"))
         .bind(host_id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "create", "host", host_id, None::<&Host>, Some(&host)).await;
 
@@ -267,8 +262,8 @@ async fn get_host(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     Ok(Json(host))
 }
@@ -290,8 +285,8 @@ async fn update_host(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let result = sqlx::query(
         "UPDATE hosts SET label = $1, hostname = $2, os = $3, os_family = $4, criticality = $5,
@@ -311,7 +306,7 @@ async fn update_host(
     .bind(id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -321,7 +316,7 @@ async fn update_host(
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "update", "host", id, Some(&before), Some(&host)).await;
 
@@ -340,14 +335,14 @@ async fn delete_host(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     let result = sqlx::query("DELETE FROM hosts WHERE id = $1")
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -358,7 +353,7 @@ async fn delete_host(
         .bind(format!("host:{id}"))
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(&state.pool, user.id, "delete", "host", id, Some(&before), None::<&Host>).await;
 
@@ -386,7 +381,7 @@ async fn add_address(
         .bind(host_id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(host))
 }
@@ -404,7 +399,7 @@ async fn remove_address(
         .bind(host_id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
@@ -424,20 +419,20 @@ async fn add_tag(
 
     let tag_id = get_or_create_tag(&state.pool, engagement_id, &payload.name)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     sqlx::query("INSERT INTO host_tags (host_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
         .bind(host_id)
         .bind(tag_id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let host = sqlx::query_as::<_, Host>(&format!("{HOST_SELECT} WHERE h.id = $1 GROUP BY h.id"))
         .bind(host_id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(host))
 }
@@ -455,7 +450,7 @@ async fn remove_tag(
         .bind(tag_id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
@@ -483,7 +478,7 @@ async fn list_engagement_tags(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(tags))
 }

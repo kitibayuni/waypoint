@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 #[derive(Serialize)]
@@ -70,8 +71,8 @@ async fn get_dashboard(
     .bind(engagement_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     let today = Utc::now().date_naive();
     let days_elapsed = eng.start_date.map(|d| (today - d).num_days());
@@ -92,7 +93,7 @@ async fn get_dashboard(
             .bind(engagement_id)
             .fetch_all(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
     let hosts_by_status: HashMap<String, i64> = host_rows.into_iter().collect();
 
     let finding_rows: Vec<(String, i64)> = sqlx::query_as(
@@ -102,7 +103,7 @@ async fn get_dashboard(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     let findings_by_severity: HashMap<String, i64> = finding_rows.into_iter().collect();
 
     let checklist_rows: Vec<(String, i64)> = sqlx::query_as(
@@ -115,7 +116,7 @@ async fn get_dashboard(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
     let checklist_map: HashMap<String, i64> = checklist_rows.into_iter().collect();
     let done = *checklist_map.get("done").unwrap_or(&0);
     let na = *checklist_map.get("na").unwrap_or(&0);
@@ -155,7 +156,7 @@ async fn get_dashboard(
     .bind(engagement_id)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let credentials = CredentialStats {
         total: cred_row.total,
@@ -168,7 +169,7 @@ async fn get_dashboard(
             .bind(engagement_id)
             .fetch_one(&state.pool)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
 
     Ok(Json(Dashboard {
         engagement,

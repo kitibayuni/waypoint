@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::ResultExt;
 use crate::search::{search, SearchResult};
 use crate::state::AppState;
 
@@ -39,7 +40,7 @@ async fn search_engagement(
 
     let results = search(&state.pool, engagement_id, &query.q, &types)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(results))
 }

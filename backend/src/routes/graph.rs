@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::graph::build_graph;
+use crate::routes::common::ResultExt;
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -27,7 +28,7 @@ async fn get_graph(
 
     let graph = build_graph(&state.pool, engagement_id, query.as_of)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(graph))
 }

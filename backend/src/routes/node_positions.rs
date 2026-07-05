@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::ResultExt;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -36,7 +37,7 @@ async fn list_node_positions(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(rows))
 }
@@ -53,7 +54,7 @@ async fn upsert_node_positions(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     for p in &payload {
         sqlx::query(
@@ -68,10 +69,10 @@ async fn upsert_node_positions(
         .bind(p.y)
         .execute(&mut *tx)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
     }
 
-    tx.commit().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tx.commit().await.internal()?;
 
     Ok(StatusCode::NO_CONTENT)
 }

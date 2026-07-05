@@ -2,6 +2,7 @@ pub mod attachments;
 pub mod audit;
 pub mod checklists;
 pub mod clients;
+pub(crate) mod common;
 pub mod credential_usage;
 pub mod credentials;
 pub mod dashboard;

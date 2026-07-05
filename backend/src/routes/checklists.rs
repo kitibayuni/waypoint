@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, OptionExt, ResultExt};
 use crate::routes::hosts::host_engagement_id;
 use crate::state::AppState;
 
@@ -55,19 +56,16 @@ const CHECKLIST_SELECT: &str = "SELECT c.id, c.host_id, c.engagement_id, c.name,
     LEFT JOIN checklist_items ci ON ci.checklist_id = c.id";
 
 async fn checklist_item_engagement_id(pool: &PgPool, item_id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>(
+    scoped_engagement_id(
+        pool,
         "SELECT COALESCE(h.engagement_id, c.engagement_id)
          FROM checklist_items ci
          JOIN checklists c ON c.id = ci.checklist_id
          LEFT JOIN hosts h ON h.id = c.host_id
          WHERE ci.id = $1",
+        item_id,
     )
-    .bind(item_id)
-    .fetch_optional(pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .map(|(id,)| id)
-    .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn list_host_checklists(
@@ -84,7 +82,7 @@ async fn list_host_checklists(
     .bind(host_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(checklists))
 }
@@ -107,7 +105,7 @@ async fn list_engagement_checklists(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(checklists))
 }
@@ -128,13 +126,13 @@ async fn get_service_checklist(
     .bind(service_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     let engagement_id = host_engagement_id(&state.pool, host_id).await?;
     require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
 
-    let name = name.ok_or(StatusCode::NOT_FOUND)?;
+    let name = name.or_404()?;
 
     let template_id: (Uuid,) = sqlx::query_as(
         "SELECT template_id FROM service_checklist_templates WHERE service_name = $1",
@@ -142,8 +140,8 @@ async fn get_service_checklist(
     .bind(&name)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     let checklist = sqlx::query_as::<_, Checklist>(&format!(
         "{CHECKLIST_SELECT} WHERE c.host_id = $1 AND c.template_origin_id = $2 GROUP BY c.id"
@@ -152,8 +150,8 @@ async fn get_service_checklist(
     .bind(template_id.0)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     Ok(Json(checklist))
 }
@@ -187,8 +185,8 @@ async fn update_checklist_item(
     .bind(id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     Ok(Json(item))
 }
@@ -228,7 +226,7 @@ pub(crate) async fn insert_checklist_from_template(
     .bind(template_id)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
         for (idx, item) in items.iter().filter_map(|v| v.as_str()).enumerate() {
@@ -238,7 +236,7 @@ pub(crate) async fn insert_checklist_from_template(
                 .bind(idx as i32)
                 .execute(&mut **tx)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .internal()?;
         }
     }
 

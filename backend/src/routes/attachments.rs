@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 use crate::subject_types::ATTACHMENT_SUBJECT_TYPES;
 
@@ -64,7 +65,7 @@ async fn list_attachments(
     .bind(q.subject_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(attachments))
 }
@@ -133,10 +134,10 @@ async fn upload_attachment(
 
     tokio::fs::create_dir_all(&state.attachments_dir)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
     tokio::fs::write(&storage_path, &file_bytes)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let size = file_bytes.len() as i64;
 
@@ -155,13 +156,13 @@ async fn upload_attachment(
     .bind(&caption)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let attachment = sqlx::query_as::<_, Attachment>(&format!("{ATTACHMENT_SELECT} WHERE id = $1"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(attachment))
 }
@@ -185,8 +186,8 @@ async fn download_attachment(
     .bind(id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     require_role(&state.pool, &user, row.engagement_id, EngagementRole::Viewer).await?;
 
@@ -222,8 +223,8 @@ async fn delete_attachment(
         .bind(id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     require_role(&state.pool, &user, row.engagement_id, EngagementRole::Tester).await?;
 
@@ -231,7 +232,7 @@ async fn delete_attachment(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let _ = tokio::fs::remove_file(state.attachments_dir.join(&row.storage_path)).await;
 

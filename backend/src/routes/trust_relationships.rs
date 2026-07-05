@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::audit::log_action;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
+use crate::routes::common::{scoped_engagement_id, ResultExt};
 use crate::state::AppState;
 
 const VALID_KINDS: [&str; 4] = ["domain_trust", "admin_of", "shares_creds", "session"];
@@ -19,13 +20,12 @@ fn valid_kind(k: &str) -> bool {
 }
 
 async fn trust_engagement_id(pool: &PgPool, id: Uuid) -> Result<Uuid, StatusCode> {
-    sqlx::query_as::<_, (Uuid,)>("SELECT engagement_id FROM trust_relationships WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map(|(id,)| id)
-        .ok_or(StatusCode::NOT_FOUND)
+    scoped_engagement_id(
+        pool,
+        "SELECT engagement_id FROM trust_relationships WHERE id = $1",
+        id,
+    )
+    .await
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -70,7 +70,7 @@ async fn list_trusts(
     .bind(engagement_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(trusts))
 }
@@ -100,13 +100,13 @@ async fn create_trust(
     .bind(&payload.note)
     .fetch_one(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let trust = sqlx::query_as::<_, TrustRelationship>(&format!("{TRUST_SELECT} WHERE tr.id = $1"))
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     log_action(
         &state.pool,
@@ -147,7 +147,7 @@ async fn update_trust(
     .bind(id)
     .execute(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
@@ -157,7 +157,7 @@ async fn update_trust(
         .bind(id)
         .fetch_one(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(trust))
 }
@@ -174,7 +174,7 @@ async fn delete_trust(
         .bind(id)
         .execute(&state.pool)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

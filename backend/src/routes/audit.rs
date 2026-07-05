@@ -8,6 +8,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::auth::CurrentUser;
+use crate::routes::common::ResultExt;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -42,7 +43,7 @@ async fn list_audit_log(
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(entries))
 }

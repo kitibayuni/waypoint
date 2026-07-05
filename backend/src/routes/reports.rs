@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::report::render_html;
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -28,8 +29,8 @@ async fn get_report(
 
     let html = render_html(&state.pool, engagement_id)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .internal()?
+        .or_404()?;
 
     if q.format.as_deref() != Some("pdf") {
         return Ok((
@@ -47,19 +48,19 @@ async fn get_report(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let mut stdin = child.stdin.take().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     stdin
         .write_all(html.as_bytes())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
     drop(stdin);
 
     let output = child
         .wait_with_output()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     if !output.status.success() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);

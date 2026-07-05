@@ -23,7 +23,7 @@ impl CredentialCipher {
     pub fn encrypt(&self, plaintext: &str) -> Vec<u8> {
         let mut nonce_bytes = [0u8; NONCE_LEN];
         rand::rng().fill(&mut nonce_bytes);
-        let nonce = Nonce::try_from(nonce_bytes).expect("nonce is always 12 bytes");
+        let nonce = Nonce::from(nonce_bytes);
         let ciphertext = self
             .cipher
             .encrypt(&nonce, plaintext.as_bytes())

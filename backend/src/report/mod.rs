@@ -224,9 +224,9 @@ this assessment.</p>
         } else {
             Some(severity.clone())
         };
-        write!(
+        writeln!(
             out,
-            "<tr><td><span class=\"severity-badge\" style=\"background:{color}\">{label}</span></td><td>{count}</td></tr>\n",
+            "<tr><td><span class=\"severity-badge\" style=\"background:{color}\">{label}</span></td><td>{count}</td></tr>",
             color = severity_color(&sev_opt),
             label = html_escape(severity),
             count = count,
@@ -265,9 +265,9 @@ this assessment.</p>
     .ok();
 
     for s in &scope {
-        write!(
+        writeln!(
             out,
-            "<tr class=\"{cls}\"><td>{kind}</td><td>{value}</td><td>{in_scope}</td></tr>\n",
+            "<tr class=\"{cls}\"><td>{kind}</td><td>{value}</td><td>{in_scope}</td></tr>",
             cls = if s.in_scope { "" } else { "out-of-scope" },
             kind = html_escape(&s.kind),
             value = html_escape(&s.value),

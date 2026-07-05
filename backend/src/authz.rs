@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::CurrentUser;
+use crate::http_error::ResultExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum EngagementRole {
@@ -42,7 +43,7 @@ pub async fn require_role(
     .bind(user.id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let role = row
         .and_then(|(r,)| EngagementRole::from_str(&r))

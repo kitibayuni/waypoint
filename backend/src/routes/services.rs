@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::routes::checklists::insert_checklist_from_template;
+use crate::routes::common::{OptionExt, ResultExt};
 use crate::routes::hosts::host_engagement_id;
 use crate::state::AppState;
 
@@ -87,7 +88,7 @@ pub(crate) async fn maybe_auto_checklist(
     .bind(name)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let Some((template_id, template_name, body)) = mapped else {
         return Ok(());
@@ -100,7 +101,7 @@ pub(crate) async fn maybe_auto_checklist(
     .bind(template_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if already.is_some() {
         return Ok(());
@@ -124,7 +125,7 @@ async fn list_services(
     .bind(host_id)
     .fetch_all(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     Ok(Json(services))
 }
@@ -141,23 +142,23 @@ async fn create_service(
     if !valid_protocol(&payload.protocol) || !valid_port(payload.port) {
         return Err(StatusCode::BAD_REQUEST);
     }
-    if let Some(name) = &payload.name {
-        if !valid_service_name(name) {
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if let Some(name) = &payload.name
+        && !valid_service_name(name)
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
 
     let mut tx = state
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
-    let service = sqlx::query_as::<_, Service>(&format!(
+    let service = sqlx::query_as::<_, Service>(
         "INSERT INTO services (host_id, port, protocol, name, display_name, version, banner, state)
          VALUES ($1, $2, $3::service_protocol, $4, $5, $6, $7, $8)
          RETURNING id, host_id, port, protocol::text AS protocol, name, display_name, version, banner, state, created_at"
-    ))
+    )
     .bind(host_id)
     .bind(payload.port)
     .bind(&payload.protocol)
@@ -168,7 +169,7 @@ async fn create_service(
     .bind(&payload.state)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     if let Some(name) = &payload.name {
         maybe_auto_checklist(&mut tx, host_id, name).await?;
@@ -176,7 +177,7 @@ async fn create_service(
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(Json(service))
 }
@@ -193,17 +194,17 @@ async fn update_service(
     if !valid_protocol(&payload.protocol) || !valid_port(payload.port) {
         return Err(StatusCode::BAD_REQUEST);
     }
-    if let Some(name) = &payload.name {
-        if !valid_service_name(name) {
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if let Some(name) = &payload.name
+        && !valid_service_name(name)
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
 
-    let service = sqlx::query_as::<_, Service>(&format!(
+    let service = sqlx::query_as::<_, Service>(
         "UPDATE services SET port = $1, protocol = $2::service_protocol, name = $3, display_name = $4,
          version = $5, banner = $6, state = $7 WHERE id = $8 AND host_id = $9
          RETURNING id, host_id, port, protocol::text AS protocol, name, display_name, version, banner, state, created_at"
-    ))
+    )
     .bind(payload.port)
     .bind(&payload.protocol)
     .bind(&payload.name)
@@ -215,8 +216,8 @@ async fn update_service(
     .bind(host_id)
     .fetch_optional(&state.pool)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::NOT_FOUND)?;
+    .internal()?
+    .or_404()?;
 
     Ok(Json(service))
 }
@@ -233,7 +234,7 @@ async fn delete_service(
         .pool
         .begin()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     let deleted: Option<(Option<String>,)> = sqlx::query_as(
         "DELETE FROM services WHERE id = $1 AND host_id = $2 RETURNING name",
@@ -242,7 +243,7 @@ async fn delete_service(
     .bind(host_id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .internal()?;
 
     let Some((name,)) = deleted else {
         return Err(StatusCode::NOT_FOUND);
@@ -259,7 +260,7 @@ async fn delete_service(
         .bind(name)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
         if still_present.is_none() {
             let template_id: Option<(Uuid,)> = sqlx::query_as(
@@ -268,7 +269,7 @@ async fn delete_service(
             .bind(name)
             .fetch_optional(&mut *tx)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .internal()?;
 
             if let Some((template_id,)) = template_id {
                 sqlx::query(
@@ -278,14 +279,14 @@ async fn delete_service(
                 .bind(template_id)
                 .execute(&mut *tx)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .internal()?;
             }
         }
     }
 
     tx.commit()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .internal()?;
 
     Ok(StatusCode::NO_CONTENT)
 }
