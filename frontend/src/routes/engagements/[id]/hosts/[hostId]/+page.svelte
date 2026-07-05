@@ -36,9 +36,9 @@
 	let services = $state<Service[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let activeTab = $state<
-		'general' | 'access' | 'services' | 'checklists' | 'notes' | 'attachments'
-	>('general');
+	let activeTab = $state<'general' | 'services' | 'checklists' | 'notes' | 'attachments'>(
+		'general'
+	);
 
 	let labelDraft = $state('');
 	let hostnameDraft = $state('');
@@ -258,10 +258,7 @@
 
 		<nav class="tabs">
 			<button class:active={activeTab === 'general'} onclick={() => (activeTab = 'general')}>
-				General
-			</button>
-			<button class:active={activeTab === 'access'} onclick={() => (activeTab = 'access')}>
-				Access ({incomingAccess.length})
+				General &amp; access ({incomingAccess.length})
 			</button>
 			<button class:active={activeTab === 'services'} onclick={() => (activeTab = 'services')}>
 				Services ({services.length})
@@ -278,131 +275,133 @@
 		</nav>
 
 		{#if activeTab === 'general'}
-			<section>
-				<div class="grid">
+			<section class="general-access-grid">
+				<div class="general-col">
+					<div class="grid">
+						<label>
+							Label
+							<input bind:value={labelDraft} />
+						</label>
+						<label>
+							Hostname
+							<input bind:value={hostnameDraft} />
+						</label>
+						<label>
+							OS
+							<input bind:value={osDraft} />
+						</label>
+						<label>
+							OS family
+							<input bind:value={osFamilyDraft} />
+						</label>
+						<label>
+							Criticality
+							<input bind:value={criticalityDraft} />
+						</label>
+						<label>
+							Status
+							<select bind:value={statusDraft}>
+								<option value="discovered">discovered</option>
+								<option value="enumerating">enumerating</option>
+								<option value="exploited">exploited</option>
+								<option value="owned">owned</option>
+								<option value="cleared">cleared</option>
+							</select>
+						</label>
+					</div>
 					<label>
-						Label
-						<input bind:value={labelDraft} />
+						General notes
+						<textarea bind:value={notesDraft} rows="6"></textarea>
 					</label>
-					<label>
-						Hostname
-						<input bind:value={hostnameDraft} />
-					</label>
-					<label>
-						OS
-						<input bind:value={osDraft} />
-					</label>
-					<label>
-						OS family
-						<input bind:value={osFamilyDraft} />
-					</label>
-					<label>
-						Criticality
-						<input bind:value={criticalityDraft} />
-					</label>
-					<label>
-						Status
-						<select bind:value={statusDraft}>
-							<option value="discovered">discovered</option>
-							<option value="enumerating">enumerating</option>
-							<option value="exploited">exploited</option>
-							<option value="owned">owned</option>
-							<option value="cleared">cleared</option>
-						</select>
-					</label>
-				</div>
-				<label>
-					General notes
-					<textarea bind:value={notesDraft} rows="6"></textarea>
-				</label>
-				<button onclick={() => saveHost('Failed to save host.')}>Save</button>
+					<button onclick={() => saveHost('Failed to save host.')}>Save</button>
 
-				<h2>IP addresses</h2>
-				<ul class="chips">
-					{#each host.addresses as addr (addr.id)}
-						<li class="chip">
-							{addr.ip}{addr.is_primary ? ' (primary)' : ''}
-							<button onclick={() => handleRemoveIp(addr.id)}>&times;</button>
-						</li>
-					{/each}
-				</ul>
-				<div class="inline-form">
-					<input bind:value={newIp} placeholder="10.10.10.7" />
-					<button onclick={handleAddIp}>Add</button>
-				</div>
-
-				<h2>Tags</h2>
-				<ul class="chips">
-					{#each host.tags as tag (tag.id)}
-						<li class="chip">
-							{tag.name}
-							<button onclick={() => handleRemoveTag(tag.id)}>&times;</button>
-						</li>
-					{/each}
-				</ul>
-				<div class="inline-form">
-					<input bind:value={newTagName} placeholder="new-tag" />
-					<button onclick={handleAddTag}>Add</button>
-				</div>
-			</section>
-		{:else if activeTab === 'access'}
-			<section>
-				<h2>Accessible from</h2>
-				{#if incomingAccess.length === 0}
-					<p class="muted">
-						No recorded access to this host yet — log how you got in below, or log it as a
-						pivot target from another host's Access tab.
-					</p>
-				{:else}
-					<ul class="access-list">
-						{#each incomingAccess as t (t.id)}
-							<li>
-								Accessible from
-								<a href={`/engagements/${engagementId}/hosts/${t.from_host_id}`}>{t.from_host_label}</a>
-								<span class="muted">({t.kind}){t.note ? ` — ${t.note}` : ''}</span>
-								<button onclick={() => handleRemoveAccess(t.id)}>&times;</button>
+					<h2>IP addresses</h2>
+					<ul class="chips">
+						{#each host.addresses as addr (addr.id)}
+							<li class="chip">
+								{addr.ip}{addr.is_primary ? ' (primary)' : ''}
+								<button onclick={() => handleRemoveIp(addr.id)}>&times;</button>
 							</li>
 						{/each}
 					</ul>
-				{/if}
+					<div class="inline-form">
+						<input bind:value={newIp} placeholder="10.10.10.7" />
+						<button onclick={handleAddIp}>Add</button>
+					</div>
 
-				<h3>Log access</h3>
-				<form onsubmit={handleLogAccess} class="inline-form">
-					<select bind:value={accessDirection}>
-						<option value="from">This host is accessible from…</option>
-						<option value="to">This host has access to…</option>
-					</select>
-					<select bind:value={accessOtherHostId}>
-						<option value="" disabled selected>Other host…</option>
-						{#each allHosts.filter((h) => h.id !== hostId) as h (h.id)}
-							<option value={h.id}>{h.label}</option>
+					<h2>Tags</h2>
+					<ul class="chips">
+						{#each host.tags as tag (tag.id)}
+							<li class="chip">
+								{tag.name}
+								<button onclick={() => handleRemoveTag(tag.id)}>&times;</button>
+							</li>
 						{/each}
-					</select>
-					<select bind:value={accessKind}>
-						<option value="domain_trust">domain trust</option>
-						<option value="admin_of">admin of</option>
-						<option value="shares_creds">shares creds</option>
-						<option value="session">session</option>
-					</select>
-					<input bind:value={accessNote} placeholder="note (optional)" />
-					<button type="submit">Log</button>
-				</form>
+					</ul>
+					<div class="inline-form">
+						<input bind:value={newTagName} placeholder="new-tag" />
+						<button onclick={handleAddTag}>Add</button>
+					</div>
+				</div>
 
-				<label class="foothold-toggle">
-					<input type="checkbox" bind:checked={isFootholdDraft} />
-					Mark this host as the foothold / initial access point
-				</label>
-				<label class="foothold-toggle">
-					<input type="checkbox" bind:checked={isPivotDraft} />
-					Mark this host as a pivot point
-				</label>
-				<button onclick={() => saveHost('Failed to save foothold/pivot status.')}>Save</button>
+				<div class="access-col">
+					<h2>Accessible from</h2>
+					{#if incomingAccess.length === 0}
+						<p class="muted">
+							No recorded access to this host yet — log how you got in below, or log it as a
+							pivot target from another host's access section.
+						</p>
+					{:else}
+						<ul class="access-list">
+							{#each incomingAccess as t (t.id)}
+								<li>
+									Accessible from
+									<a href={`/engagements/${engagementId}/hosts/${t.from_host_id}`}>{t.from_host_label}</a>
+									<span class="muted">({t.kind}){t.note ? ` — ${t.note}` : ''}</span>
+									<button onclick={() => handleRemoveAccess(t.id)}>&times;</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
 
-				<h2>Login procedure notes</h2>
-				<label>
-					<textarea bind:value={loginNotesDraft} rows="8"></textarea>
-				</label>
-				<button onclick={() => saveHost('Failed to save login procedure notes.')}>Save</button>
+					<h3>Log access</h3>
+					<form onsubmit={handleLogAccess} class="inline-form">
+						<select bind:value={accessDirection}>
+							<option value="from">This host is accessible from…</option>
+							<option value="to">This host has access to…</option>
+						</select>
+						<select bind:value={accessOtherHostId}>
+							<option value="" disabled selected>Other host…</option>
+							{#each allHosts.filter((h) => h.id !== hostId) as h (h.id)}
+								<option value={h.id}>{h.label}</option>
+							{/each}
+						</select>
+						<select bind:value={accessKind}>
+							<option value="domain_trust">domain trust</option>
+							<option value="admin_of">admin of</option>
+							<option value="shares_creds">shares creds</option>
+							<option value="session">session</option>
+						</select>
+						<input bind:value={accessNote} placeholder="note (optional)" />
+						<button type="submit">Log</button>
+					</form>
+
+					<label class="foothold-toggle">
+						<input type="checkbox" bind:checked={isFootholdDraft} />
+						Mark this host as the foothold / initial access point
+					</label>
+					<label class="foothold-toggle">
+						<input type="checkbox" bind:checked={isPivotDraft} />
+						Mark this host as a pivot point
+					</label>
+					<button onclick={() => saveHost('Failed to save foothold/pivot status.')}>Save</button>
+
+					<h2>Login procedure notes</h2>
+					<label>
+						<textarea bind:value={loginNotesDraft} rows="8"></textarea>
+					</label>
+					<button onclick={() => saveHost('Failed to save login procedure notes.')}>Save</button>
+				</div>
 			</section>
 		{:else if activeTab === 'services'}
 			<section>
@@ -500,6 +499,27 @@
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 0.5rem;
 		margin-bottom: 0.75rem;
+	}
+	.general-access-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 2rem;
+		align-items: start;
+	}
+	.access-col {
+		border-left: 1px solid var(--border);
+		padding-left: 2rem;
+	}
+	@media (max-width: 900px) {
+		.general-access-grid {
+			grid-template-columns: 1fr;
+		}
+		.access-col {
+			border-left: none;
+			padding-left: 0;
+			border-top: 1px solid var(--border);
+			padding-top: 1rem;
+		}
 	}
 	label {
 		display: flex;
