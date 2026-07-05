@@ -3,7 +3,7 @@
 	import { createCredential, deleteCredential } from '$lib/api/credentials';
 	import { createFinding } from '$lib/api/findings';
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
-	import { deleteService } from '$lib/api/services';
+	import { createService, deleteService, SERVICE_NAMES } from '$lib/api/services';
 
 	let {
 		info,
@@ -25,7 +25,7 @@
 	} = $props();
 
 	let menuEl = $state<HTMLElement>();
-	let mode = $state<'menu' | 'add-host' | 'add-credential' | 'add-finding'>('menu');
+	let mode = $state<'menu' | 'add-host' | 'add-credential' | 'add-finding' | 'add-service'>('menu');
 	let error = $state('');
 
 	let hostLabel = $state('');
@@ -42,6 +42,12 @@
 
 	let findingTitle = $state('');
 	let findingSeverity = $state('');
+
+	let svcPort = $state<number | ''>('');
+	let svcProtocol = $state('tcp');
+	let svcName = $state('');
+	let svcDisplayName = $state('');
+	let svcVersion = $state('');
 
 	// Re-clamp whenever the menu's content changes size (e.g. switching from the
 	// top-level menu to a bigger add-form), not just once at mount.
@@ -139,6 +145,24 @@
 		}
 	}
 
+	async function handleAddService(e: SubmitEvent) {
+		e.preventDefault();
+		if (svcPort === '' || !info.nodeId) return;
+		try {
+			await createService(info.nodeId, {
+				port: Number(svcPort),
+				protocol: svcProtocol,
+				name: svcName || null,
+				display_name: svcDisplayName || null,
+				version: svcVersion || null
+			});
+			onChanged();
+			onClose();
+		} catch {
+			error = 'Failed to add service.';
+		}
+	}
+
 	async function handleDelete() {
 		if (!info.nodeId) return;
 		if (!confirm(`Delete this ${info.target}? This cannot be undone.`)) return;
@@ -170,6 +194,9 @@
 			<li><button type="button" onclick={() => (mode = 'add-host')}>+ Add host</button></li>
 			<li><button type="button" onclick={() => (mode = 'add-credential')}>+ Add credential</button></li>
 			<li><button type="button" onclick={() => (mode = 'add-finding')}>+ Add finding</button></li>
+			{#if info.target === 'host'}
+				<li><button type="button" onclick={() => (mode = 'add-service')}>+ Add service</button></li>
+			{/if}
 			{#if info.target !== 'background'}
 				<li>
 					<button type="button" class="danger" onclick={handleDelete}>
@@ -259,7 +286,7 @@
 				<button type="button" onclick={() => (mode = 'menu')}>Back</button>
 			</div>
 		</form>
-	{:else}
+	{:else if mode === 'add-finding'}
 		<form onsubmit={handleAddFinding}>
 			<h3>Add finding</h3>
 			<label>
@@ -275,6 +302,42 @@
 					<option value="high">high</option>
 					<option value="critical">critical</option>
 				</select>
+			</label>
+			<div class="actions">
+				<button type="submit">Add</button>
+				<button type="button" onclick={() => (mode = 'menu')}>Back</button>
+			</div>
+		</form>
+	{:else}
+		<form onsubmit={handleAddService}>
+			<h3>Add service</h3>
+			<label>
+				Port
+				<input type="number" min="0" max="65535" bind:value={svcPort} required placeholder="e.g. 445" />
+			</label>
+			<label>
+				Protocol
+				<select bind:value={svcProtocol}>
+					<option value="tcp">tcp</option>
+					<option value="udp">udp</option>
+				</select>
+			</label>
+			<label>
+				Service
+				<select bind:value={svcName}>
+					<option value="" disabled selected>Service…</option>
+					{#each SERVICE_NAMES as svc (svc)}
+						<option value={svc}>{svc}</option>
+					{/each}
+				</select>
+			</label>
+			<label>
+				Display name
+				<input bind:value={svcDisplayName} placeholder="display name (optional)" />
+			</label>
+			<label>
+				Version
+				<input bind:value={svcVersion} placeholder="version (optional)" />
 			</label>
 			<div class="actions">
 				<button type="submit">Add</button>
