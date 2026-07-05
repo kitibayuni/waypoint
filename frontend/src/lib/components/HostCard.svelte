@@ -1,10 +1,16 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { Host } from '$lib/api/hosts';
 
-	let { host }: { host: Host } = $props();
+	// `onclick` switches this from a navigation link (the Hosts page's default
+	// use) to a plain button that lets the caller handle the click itself
+	// (e.g. ChecklistSidePanel switching its own internal view instead of
+	// leaving the page). `extra` lets a caller append content below the tags
+	// (e.g. a checklist-completion badge) without forking this component.
+	let { host, onclick, extra }: { host: Host; onclick?: () => void; extra?: Snippet } = $props();
 </script>
 
-<a class="host-card" href={`/engagements/${host.engagement_id}/hosts/${host.id}`}>
+{#snippet content()}
 	<div class="host-card-header">
 		<strong>{host.label}</strong>
 		<span class="status">{host.status}</span>
@@ -21,16 +27,30 @@
 			{/each}
 		</div>
 	{/if}
-</a>
+	{#if extra}{@render extra()}{/if}
+{/snippet}
+
+{#if onclick}
+	<button type="button" class="host-card" {onclick}>{@render content()}</button>
+{:else}
+	<a class="host-card" href={`/engagements/${host.engagement_id}/hosts/${host.id}`}>
+		{@render content()}
+	</a>
+{/if}
 
 <style>
 	.host-card {
 		display: block;
+		width: 100%;
+		text-align: left;
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.75rem 1rem;
+		background: none;
 		text-decoration: none;
 		color: inherit;
+		font: inherit;
+		cursor: pointer;
 	}
 	.host-card:hover {
 		border-color: var(--text-muted);

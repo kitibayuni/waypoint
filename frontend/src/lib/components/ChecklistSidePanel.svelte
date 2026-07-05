@@ -4,6 +4,7 @@
 	import { listEngagementChecklists } from '$lib/api/checklists';
 	import type { Checklist } from '$lib/api/checklists';
 	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
+	import HostCard from '$lib/components/HostCard.svelte';
 
 	let { engagementId }: { engagementId: string } = $props();
 
@@ -111,27 +112,13 @@
 			<div class="host-list">
 				{#each hosts as host (host.id)}
 					{@const { done, total } = completion(host.id)}
-					<button type="button" class="host-card" onclick={() => openHost(host.id)}>
-						<div class="host-card-header">
-							<strong>{host.label}</strong>
-							<span class="status">{host.status}</span>
-						</div>
-						{#if host.hostname}<div class="line">{host.hostname}</div>{/if}
-						{#if host.os}<div class="line">{host.os}</div>{/if}
-						{#if host.addresses.length}
-							<div class="line addresses">{host.addresses.map((a) => a.ip).join(', ')}</div>
-						{/if}
-						{#if host.tags.length}
-							<div class="tags">
-								{#each host.tags as tag (tag.id)}
-									<span class="tag">{tag.name}</span>
-								{/each}
-							</div>
-						{/if}
-						{#if total > 0}
-							<div class="progress">{done}/{total} checklist items done</div>
-						{/if}
-					</button>
+					<HostCard {host} onclick={() => openHost(host.id)}>
+						{#snippet extra()}
+							{#if total > 0}
+								<div class="progress">{done}/{total} checklist items done</div>
+							{/if}
+						{/snippet}
+					</HostCard>
 				{/each}
 			</div>
 		{/if}
@@ -265,52 +252,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-	}
-	.host-card {
-		display: block;
-		width: 100%;
-		text-align: left;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		padding: 0.75rem 1rem;
-		background: none;
-		color: inherit;
-		font: inherit;
-		cursor: pointer;
-	}
-	.host-card:hover {
-		border-color: var(--text-muted);
-	}
-	.host-card-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	.status {
-		font-size: 0.75rem;
-		text-transform: uppercase;
-		padding: 0.1rem 0.5rem;
-		border-radius: 999px;
-		background: var(--surface-2);
-	}
-	.line {
-		font-size: 0.9rem;
-		color: var(--text-muted);
-	}
-	.addresses {
-		font-family: monospace;
-	}
-	.tags {
-		margin-top: 0.4rem;
-		display: flex;
-		gap: 0.3rem;
-		flex-wrap: wrap;
-	}
-	.tag {
-		font-size: 0.75rem;
-		background: var(--surface-3);
-		padding: 0.1rem 0.5rem;
-		border-radius: 999px;
 	}
 	.progress {
 		margin-top: 0.4rem;
