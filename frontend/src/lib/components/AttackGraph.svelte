@@ -446,16 +446,31 @@
 			}
 		}
 
-		if (onContextMenu) {
+		if (interactive) {
+			// The browser's own right-click menu (copy/paste/inspect/etc.) has no
+			// place on the graph -- it visually collides with our custom
+			// menu/right-click-drag gesture. Suppress it at every layer a browser
+			// might use to decide to show it, not just the standard `contextmenu`
+			// event: some browsers/input devices (trackpad "hold" gestures in
+			// particular) act on the right-button mousedown itself.
 			container.oncontextmenu = (e) => e.preventDefault();
-			// Belt-and-braces: also catch it at the document level in case a
-			// right-click-drag gesture ends with the pointer having strayed
+			container.onmousedown = (e) => {
+				if (e.button === 2) e.preventDefault();
+			};
+			container.onmouseup = (e) => {
+				if (e.button === 2) e.preventDefault();
+			};
+			// Belt-and-braces: also catch `contextmenu` at the document level in
+			// case a right-click-drag gesture ends with the pointer having strayed
 			// outside the container's own bounds before release, which the
 			// container-scoped handler above wouldn't see.
 			contextMenuDocHandler = (e: MouseEvent) => {
 				if (container.contains(e.target as Node)) e.preventDefault();
 			};
 			document.addEventListener('contextmenu', contextMenuDocHandler);
+		}
+
+		if (onContextMenu) {
 			core.on('cxttap', 'node', (evt) => {
 				const original = evt.originalEvent as MouseEvent;
 				const type = evt.target.data('type');
