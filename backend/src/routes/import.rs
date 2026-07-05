@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
 use crate::import::{self, ParsedHost, ParsedImport};
+use crate::routes::services::maybe_auto_checklist;
 use crate::state::AppState;
 
 async fn extract_upload(mut multipart: Multipart) -> Result<(Uuid, String), StatusCode> {
@@ -255,7 +256,7 @@ async fn commit_import(
 
             if exists.is_none() {
                 sqlx::query(
-                    "INSERT INTO services (host_id, port, protocol, name, product, version)
+                    "INSERT INTO services (host_id, port, protocol, name, display_name, version)
                      VALUES ($1, $2, $3::service_protocol, $4, $5, $6)",
                 )
                 .bind(host_id)
@@ -268,6 +269,15 @@ async fn commit_import(
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                 services_added += 1;
+
+                // Bulk-imported services bypass the one-at-a-time create_service
+                // handler, which is otherwise the only place that instantiates a
+                // service's starter checklist -- do the same thing here so an
+                // imported host doesn't silently end up missing checklists that a
+                // manually-added service of the same type would have gotten.
+                if let Some(name) = &svc.name {
+                    maybe_auto_checklist(&mut tx, host_id, name).await?;
+                }
             }
         }
     }

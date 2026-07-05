@@ -72,7 +72,7 @@ const SERVICE_SELECT: &str = "SELECT id, host_id, port, protocol::text AS protoc
 /// If `name` matches a known service type with a mapped checklist template, and this
 /// host doesn't already have a checklist instantiated from that template, instantiate
 /// one now (ADJUSTMENTS.txt #1/#5: "adjust the checklist based on what is logged").
-async fn maybe_auto_checklist(
+pub(crate) async fn maybe_auto_checklist(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     host_id: Uuid,
     name: &str,
