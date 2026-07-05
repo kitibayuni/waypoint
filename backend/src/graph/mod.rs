@@ -131,6 +131,7 @@ pub async fn build_graph(
                     "source": format!("service:{}", service_id),
                     "target": format!("host:{}", h.id),
                     "type": "service-origin",
+                    "label": "access",
                 }
             }));
         }
@@ -158,10 +159,15 @@ pub async fn build_graph(
     }
 
     for s in &services {
-        let label = s
-            .display_name
-            .clone()
-            .unwrap_or_else(|| format!("{}/{}", s.port, s.protocol));
+        // Prefer an explicit display_name; otherwise lead with the service name
+        // (e.g. "mysql") so the node reads clearly rather than just a bare port.
+        let label = match &s.display_name {
+            Some(dn) if !dn.is_empty() => dn.clone(),
+            _ => match &s.name {
+                Some(name) => format!("{name} {}/{}", s.port, s.protocol),
+                None => format!("{}/{}", s.port, s.protocol),
+            },
+        };
         nodes.push(json!({
             "data": {
                 "id": format!("service:{}", s.id),

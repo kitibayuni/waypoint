@@ -175,8 +175,16 @@
 					'curve-style': 'bezier'
 				}
 			},
+			// "Access granted" to a new host via this service -- grey/dashed like the
+			// has-service connectors above (same origin-host family), but keeps its
+			// arrowhead (inherited from the base edge rule) since this one is
+			// directional. Service->credential attribution keeps the purple theme.
 			{
-				selector: 'edge[type = "service-origin"]',
+				selector: 'edge[type = "service-origin"][target ^= "host:"]',
+				style: { 'line-color': '#666', 'target-arrow-color': '#666', 'line-style': 'dashed' }
+			},
+			{
+				selector: 'edge[type = "service-origin"][target ^= "credential:"]',
 				style: { 'line-color': '#7a5ca0', 'target-arrow-color': '#7a5ca0' }
 			}
 		];
@@ -185,6 +193,11 @@
 	}
 
 	function buildLayout(randomize: boolean) {
+		// Services should read as satellites hugging their host rather than
+		// scattering across the whole layout -- a much shorter ideal length for
+		// their has-service edge specifically (independent of the general
+		// host/credential spacing) is what actually pulls them in tight.
+		const isHasService = (edge: any) => edge.data('type') === 'has-service';
 		return compact
 			? {
 					name: 'cose' as const,
@@ -194,7 +207,7 @@
 					padding: 20,
 					nodeDimensionsIncludeLabels: true,
 					componentSpacing: 80,
-					idealEdgeLength: () => 30,
+					idealEdgeLength: (edge: any) => (isHasService(edge) ? 10 : 30),
 					edgeElasticity: () => 100,
 					gravity: 60,
 					numIter: 2000,
@@ -208,8 +221,11 @@
 					padding: 40,
 					nodeDimensionsIncludeLabels: true,
 					componentSpacing: 100,
-					nodeRepulsion: () => 12000,
-					idealEdgeLength: () => 90,
+					// Services also repel less than hosts/credentials, so a cluster of
+					// them around one host settles close together instead of pushing
+					// each other outward.
+					nodeRepulsion: (node: any) => (node.data('type') === 'service' ? 3000 : 12000),
+					idealEdgeLength: (edge: any) => (isHasService(edge) ? 20 : 90),
 					edgeElasticity: () => 200,
 					gravity: 30,
 					numIter: 3000,
