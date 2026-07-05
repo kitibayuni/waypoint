@@ -48,6 +48,40 @@ fn parse_source(source: &str, content: &str) -> Result<ParsedImport, StatusCode>
     }
 }
 
+/// Builds the hostname/address -> existing-host-id maps used to decide
+/// whether an imported host should merge into an existing one or be created
+/// fresh. Shared by preview and commit: nothing is written to hosts/
+/// host_addresses before either call site uses this, so reading via the
+/// plain pool (rather than inside commit's transaction) sees the same data.
+async fn build_host_maps(
+    pool: &sqlx::PgPool,
+    engagement_id: Uuid,
+) -> Result<(HashMap<String, Uuid>, HashMap<String, Uuid>), StatusCode> {
+    let hostname_rows: Vec<(Uuid, Option<String>)> =
+        sqlx::query_as("SELECT id, hostname FROM hosts WHERE engagement_id = $1")
+            .bind(engagement_id)
+            .fetch_all(pool)
+            .await
+            .internal()?;
+    let hostname_map: HashMap<String, Uuid> = hostname_rows
+        .into_iter()
+        .filter_map(|(id, h)| h.map(|h| (h.to_lowercase(), id)))
+        .collect();
+
+    let address_rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT h.id, host(ha.ip) FROM hosts h JOIN host_addresses ha ON ha.host_id = h.id
+         WHERE h.engagement_id = $1",
+    )
+    .bind(engagement_id)
+    .fetch_all(pool)
+    .await
+    .internal()?;
+    let address_map: HashMap<String, Uuid> =
+        address_rows.into_iter().map(|(id, ip)| (ip, id)).collect();
+
+    Ok((hostname_map, address_map))
+}
+
 /// Hostnames are matched case-insensitively (DNS names conventionally are;
 /// different tools capitalize them differently -- e.g. BloodHound exports
 /// upper-case FQDNs while Nmap PTR records are typically lower-case).
@@ -96,28 +130,7 @@ async fn preview_import(
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
     let parsed = parse_source(&source, &content)?;
-
-    let hostname_rows: Vec<(Uuid, Option<String>)> =
-        sqlx::query_as("SELECT id, hostname FROM hosts WHERE engagement_id = $1")
-            .bind(engagement_id)
-            .fetch_all(&state.pool)
-            .await
-            .internal()?;
-    let hostname_map: HashMap<String, Uuid> = hostname_rows
-        .into_iter()
-        .filter_map(|(id, h)| h.map(|h| (h.to_lowercase(), id)))
-        .collect();
-
-    let address_rows: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT h.id, host(ha.ip) FROM hosts h JOIN host_addresses ha ON ha.host_id = h.id
-         WHERE h.engagement_id = $1",
-    )
-    .bind(engagement_id)
-    .fetch_all(&state.pool)
-    .await
-    .internal()?;
-    let address_map: HashMap<String, Uuid> =
-        address_rows.into_iter().map(|(id, ip)| (ip, id)).collect();
+    let (hostname_map, address_map) = build_host_maps(&state.pool, engagement_id).await?;
 
     let hosts = parsed
         .hosts
@@ -161,34 +174,13 @@ async fn commit_import(
     require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
 
     let parsed = parse_source(&source, &content)?;
+    let (mut hostname_map, mut address_map) = build_host_maps(&state.pool, engagement_id).await?;
 
     let mut tx = state
         .pool
         .begin()
         .await
         .internal()?;
-
-    let hostname_rows: Vec<(Uuid, Option<String>)> =
-        sqlx::query_as("SELECT id, hostname FROM hosts WHERE engagement_id = $1")
-            .bind(engagement_id)
-            .fetch_all(&mut *tx)
-            .await
-            .internal()?;
-    let mut hostname_map: HashMap<String, Uuid> = hostname_rows
-        .into_iter()
-        .filter_map(|(id, h)| h.map(|h| (h.to_lowercase(), id)))
-        .collect();
-
-    let address_rows: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT h.id, host(ha.ip) FROM hosts h JOIN host_addresses ha ON ha.host_id = h.id
-         WHERE h.engagement_id = $1",
-    )
-    .bind(engagement_id)
-    .fetch_all(&mut *tx)
-    .await
-    .internal()?;
-    let mut address_map: HashMap<String, Uuid> =
-        address_rows.into_iter().map(|(id, ip)| (ip, id)).collect();
 
     let mut label_to_host_id: HashMap<String, Uuid> = HashMap::new();
     let mut created_hosts = 0usize;

@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::{Json, Router};
 use chrono::{NaiveDate, Utc};
 use serde::Serialize;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::CurrentUser;
@@ -50,13 +51,10 @@ pub struct Dashboard {
     scope_count: i64,
 }
 
-async fn get_dashboard(
-    State(state): State<AppState>,
-    Extension(user): Extension<CurrentUser>,
-    Path(engagement_id): Path<Uuid>,
-) -> Result<Json<Dashboard>, StatusCode> {
-    require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
-
+async fn fetch_engagement_summary(
+    pool: &PgPool,
+    engagement_id: Uuid,
+) -> Result<Option<EngagementSummary>, StatusCode> {
     #[derive(sqlx::FromRow)]
     struct EngRow {
         id: Uuid,
@@ -69,44 +67,56 @@ async fn get_dashboard(
         "SELECT id, name, status::text AS status, start_date, end_date FROM engagements WHERE id = $1",
     )
     .bind(engagement_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await
-    .internal()?
-    .or_404()?;
+    .internal()?;
+
+    let Some(eng) = eng else {
+        return Ok(None);
+    };
 
     let today = Utc::now().date_naive();
-    let days_elapsed = eng.start_date.map(|d| (today - d).num_days());
-    let days_remaining = eng.end_date.map(|d| (d - today).num_days());
-
-    let engagement = EngagementSummary {
+    Ok(Some(EngagementSummary {
         id: eng.id,
         name: eng.name,
         status: eng.status,
+        days_elapsed: eng.start_date.map(|d| (today - d).num_days()),
+        days_remaining: eng.end_date.map(|d| (d - today).num_days()),
         start_date: eng.start_date,
         end_date: eng.end_date,
-        days_elapsed,
-        days_remaining,
-    };
+    }))
+}
 
-    let host_rows: Vec<(String, i64)> =
+async fn fetch_hosts_by_status(
+    pool: &PgPool,
+    engagement_id: Uuid,
+) -> Result<HashMap<String, i64>, StatusCode> {
+    let rows: Vec<(String, i64)> =
         sqlx::query_as("SELECT status::text, COUNT(*) FROM hosts WHERE engagement_id = $1 GROUP BY status")
             .bind(engagement_id)
-            .fetch_all(&state.pool)
+            .fetch_all(pool)
             .await
             .internal()?;
-    let hosts_by_status: HashMap<String, i64> = host_rows.into_iter().collect();
+    Ok(rows.into_iter().collect())
+}
 
-    let finding_rows: Vec<(String, i64)> = sqlx::query_as(
+async fn fetch_findings_by_severity(
+    pool: &PgPool,
+    engagement_id: Uuid,
+) -> Result<HashMap<String, i64>, StatusCode> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT COALESCE(severity, 'none'), COUNT(*) FROM findings WHERE engagement_id = $1
          GROUP BY COALESCE(severity, 'none')",
     )
     .bind(engagement_id)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await
     .internal()?;
-    let findings_by_severity: HashMap<String, i64> = finding_rows.into_iter().collect();
+    Ok(rows.into_iter().collect())
+}
 
-    let checklist_rows: Vec<(String, i64)> = sqlx::query_as(
+async fn fetch_checklist_stats(pool: &PgPool, engagement_id: Uuid) -> Result<ChecklistStats, StatusCode> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT ci.state::text, COUNT(*) FROM checklist_items ci
          JOIN checklists c ON c.id = ci.checklist_id
          LEFT JOIN hosts h ON h.id = c.host_id
@@ -114,36 +124,40 @@ async fn get_dashboard(
          GROUP BY ci.state",
     )
     .bind(engagement_id)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await
     .internal()?;
-    let checklist_map: HashMap<String, i64> = checklist_rows.into_iter().collect();
-    let done = *checklist_map.get("done").unwrap_or(&0);
-    let na = *checklist_map.get("na").unwrap_or(&0);
-    let todo = *checklist_map.get("todo").unwrap_or(&0);
-    let doing = *checklist_map.get("doing").unwrap_or(&0);
+
+    let by_state: HashMap<String, i64> = rows.into_iter().collect();
+    let done = *by_state.get("done").unwrap_or(&0);
+    let na = *by_state.get("na").unwrap_or(&0);
+    let todo = *by_state.get("todo").unwrap_or(&0);
+    let doing = *by_state.get("doing").unwrap_or(&0);
     let total = done + na + todo + doing;
     let completion_pct = if total > 0 {
         ((done + na) as f64 / total as f64 * 1000.0).round() / 10.0
     } else {
         0.0
     };
-    let checklist = ChecklistStats {
+
+    Ok(ChecklistStats {
         total,
         done,
         na,
         todo,
         doing,
         completion_pct,
-    };
+    })
+}
 
+async fn fetch_credential_stats(pool: &PgPool, engagement_id: Uuid) -> Result<CredentialStats, StatusCode> {
     #[derive(sqlx::FromRow)]
     struct CredRow {
         total: i64,
         validated: i64,
         reused: i64,
     }
-    let cred_row = sqlx::query_as::<_, CredRow>(
+    let row = sqlx::query_as::<_, CredRow>(
         "WITH reused_creds AS (
             SELECT credential_id FROM credential_usage WHERE result = 'works'
             GROUP BY credential_id HAVING COUNT(DISTINCT host_id) >= 2
@@ -154,22 +168,45 @@ async fn get_dashboard(
          FROM credentials WHERE engagement_id = $1",
     )
     .bind(engagement_id)
-    .fetch_one(&state.pool)
+    .fetch_one(pool)
     .await
     .internal()?;
 
-    let credentials = CredentialStats {
-        total: cred_row.total,
-        validated: cred_row.validated,
-        reused: cred_row.reused,
-    };
+    Ok(CredentialStats {
+        total: row.total,
+        validated: row.validated,
+        reused: row.reused,
+    })
+}
 
-    let (scope_count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM scope_items WHERE engagement_id = $1")
-            .bind(engagement_id)
-            .fetch_one(&state.pool)
-            .await
-            .internal()?;
+async fn fetch_scope_count(pool: &PgPool, engagement_id: Uuid) -> Result<i64, StatusCode> {
+    let (scope_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scope_items WHERE engagement_id = $1")
+        .bind(engagement_id)
+        .fetch_one(pool)
+        .await
+        .internal()?;
+    Ok(scope_count)
+}
+
+async fn get_dashboard(
+    State(state): State<AppState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(engagement_id): Path<Uuid>,
+) -> Result<Json<Dashboard>, StatusCode> {
+    require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
+
+    // Everything below is an independent read against the same engagement_id --
+    // running them concurrently rather than one after another means the
+    // handler's latency is the slowest single query, not the sum of all six.
+    let (engagement, hosts_by_status, findings_by_severity, checklist, credentials, scope_count) = tokio::try_join!(
+        fetch_engagement_summary(&state.pool, engagement_id),
+        fetch_hosts_by_status(&state.pool, engagement_id),
+        fetch_findings_by_severity(&state.pool, engagement_id),
+        fetch_checklist_stats(&state.pool, engagement_id),
+        fetch_credential_stats(&state.pool, engagement_id),
+        fetch_scope_count(&state.pool, engagement_id),
+    )?;
+    let engagement = engagement.or_404()?;
 
     Ok(Json(Dashboard {
         engagement,
