@@ -1,11 +1,8 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import cytoscape from 'cytoscape';
-	import type { Core, EdgeSingular, ElementDefinition } from 'cytoscape';
-	import edgehandles from 'cytoscape-edgehandles';
+	import type { Core, EdgeSingular, ElementDefinition, NodeSingular } from 'cytoscape';
 	import { listNodePositions, putNodePositions } from '$lib/api/node_positions';
-
-	cytoscape.use(edgehandles);
 
 	let {
 		elements,
@@ -13,7 +10,6 @@
 		onNodeSelect,
 		onContextMenu,
 		onEdgeCreate,
-		edgeDrawMode = $bindable(false),
 		compact = false,
 		interactive = true,
 		positions
@@ -33,15 +29,8 @@
 			/** The owning host id, only set when target is 'service'. */
 			hostId?: string;
 		}) => void;
-		/** Fires after dragging from one host to another while `edgeDrawMode` is on. */
+		/** Fires after right-click-dragging from one host to another (see the cxt* gesture wiring below). */
 		onEdgeCreate?: (info: { fromHostId: string; toHostId: string; x: number; y: number }) => void;
-		/**
-		 * Bindable: set true to enter "draw a relationship" mode (drag from one host
-		 * to another creates an edge instead of repositioning a node); resets itself
-		 * to false once the drag gesture ends, successful or not. Only meaningful
-		 * when `onEdgeCreate` is also passed.
-		 */
-		edgeDrawMode?: boolean;
 		/** Smaller fonts/padding and tighter layout spacing, for the Dashboard mini-graph panel. */
 		compact?: boolean;
 		/** Set false to disable zoom/pan/box-selection, e.g. for a read-only overview panel. */
@@ -67,7 +56,6 @@
 	let flushTimer: ReturnType<typeof setTimeout> | null = null;
 	let resizeObserver: ResizeObserver | null = null;
 	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-	let eh: ReturnType<Core['edgehandles']> | null = null;
 
 	function buildStyle(): any[] {
 		const styles: any[] = [
@@ -116,6 +104,14 @@
 					'font-size': compact ? '6px' : '8px',
 					padding: compact ? '4px' : '6px'
 				}
+			},
+			// Dormant: hasn't led anywhere (no service-origin arrow to a pivoted
+			// host or captured credential) -- dark grey and more see-through than
+			// an active service, which keeps the rule above's purple/0.55 look.
+			// The .dormant class is (re)computed in rebuild() from live edge data.
+			{
+				selector: 'node[type = "service"].dormant',
+				style: { 'background-color': '#3a3a3a', 'background-opacity': 0.3 }
 			},
 			// Border rather than background, since background already encodes
 			// host/credential/foothold identity -- matches the --warning design token.
@@ -187,6 +183,14 @@
 			{
 				selector: 'edge[type = "service-origin"][target ^= "credential:"]',
 				style: { 'line-color': '#7a5ca0', 'target-arrow-color': '#7a5ca0' }
+			},
+			// Declared last so it wins over every type-specific edge color rule
+			// above -- cytoscape's style cascade is array-order based, not
+			// specificity based, so an earlier `edge.selected` rule would just get
+			// overridden by e.g. `edge[type = "trust"]`.
+			{
+				selector: 'edge.selected',
+				style: { width: 3, 'line-color': '#e0b23f', 'target-arrow-color': '#e0b23f' }
 			}
 		];
 
@@ -338,8 +342,6 @@
 		cy?.destroy();
 		resizeObserver?.disconnect();
 		resizeObserver = null;
-		eh?.destroy();
-		eh = null;
 
 		const engId = positions?.engagementId;
 		let preparedElements = elements;
@@ -364,6 +366,14 @@
 		});
 		const core = cy;
 
+		// A service is "dormant" until it's actually led somewhere -- i.e. has a
+		// service-origin arrow to a host it helped pivot to, or a credential it
+		// helped capture. Recomputed fresh on every rebuild, which already runs
+		// on every graph mutation via the onChanged -> load -> elements chain.
+		core.nodes('[type = "service"]').forEach((svc) => {
+			svc.toggleClass('dormant', svc.connectedEdges('[type = "service-origin"]').length === 0);
+		});
+
 		// Cytoscape never re-observes its container's size on its own -- without this
 		// the canvas keeps whatever dimensions it had at construction time even after
 		// the window or a split panel resizes, until the next full rebuild.
@@ -383,7 +393,7 @@
 
 		if (onNodeSelect) {
 			core.on('tap', 'node', (evt) => {
-				core.nodes().removeClass('selected');
+				core.elements().removeClass('selected');
 				const n = evt.target;
 				n.addClass('selected');
 				selectedId = n.id();
@@ -393,11 +403,25 @@
 					data: n.data()
 				});
 			});
-			// Unfiltered `tap` also fires for node taps (delegated up to the core), so
-			// only background taps (evt.target === core) should clear the selection.
+			// Relationship arrows are selectable too, so their kind/note can be
+			// edited from the same side panel instead of a separate form.
+			core.on('tap', 'edge[type = "trust"]', (evt) => {
+				core.elements().removeClass('selected');
+				const e = evt.target;
+				e.addClass('selected');
+				selectedId = e.id();
+				onNodeSelect({
+					id: (e.id() as string).replace(/^edge:trust:/, ''),
+					type: 'trust',
+					data: e.data()
+				});
+			});
+			// Unfiltered `tap` also fires for node/edge taps (delegated up to the
+			// core), so only background taps (evt.target === core) should clear
+			// the selection.
 			core.on('tap', (evt) => {
 				if (evt.target === core) {
-					core.nodes().removeClass('selected');
+					core.elements().removeClass('selected');
 					selectedId = null;
 					onNodeSelect(null);
 				}
@@ -435,32 +459,44 @@
 		}
 
 		if (onEdgeCreate) {
-			eh = core.edgehandles({
-				canConnect: (source, target) =>
-					source.data('type') === 'host' && target.data('type') === 'host' && source.id() !== target.id(),
-				hoverDelay: 0
+			// Hold right-click on a host and drag to another host to create a
+			// relationship. Cytoscape's core has a gesture family specifically for
+			// the right button -- cxttapstart/cxtdrag/cxtdragover/cxtdragout/
+			// cxttapend -- entirely separate from cxttap (a short right-click with
+			// no movement, used below for the context menu) and from the
+			// left-button tap family, so this doesn't need any drag-mode toggle or
+			// third-party extension: a plain right-click still only ever fires
+			// cxttap, never this.
+			let cxtSourceHostId: string | null = null;
+			let cxtHoverTarget: NodeSingular | null = null;
+
+			core.on('cxttapstart', 'node[type = "host"]', (evt) => {
+				cxtSourceHostId = evt.target.id();
+				cxtHoverTarget = null;
 			});
-			if (edgeDrawMode) eh.enableDrawMode();
-			// edgehandles adds a real (placeholder) edge on completion -- the canonical
-			// edge only exists once the relationship pop-up's API call + graph reload
-			// succeed, so remove the placeholder immediately rather than let it linger.
-			core.on('ehcomplete', (_evt, sourceNode, targetNode, addedEdge) => {
-				addedEdge.remove();
-				const rect = container.getBoundingClientRect();
-				const pos = targetNode.renderedPosition();
-				onEdgeCreate({
-					fromHostId: (sourceNode.id() as string).replace(/^host:/, ''),
-					toHostId: (targetNode.id() as string).replace(/^host:/, ''),
-					x: rect.left + pos.x,
-					y: rect.top + pos.y
-				});
+			core.on('cxtdragover', 'node[type = "host"]', (evt) => {
+				if (cxtSourceHostId && evt.target.id() !== cxtSourceHostId) {
+					cxtHoverTarget = evt.target;
+				}
 			});
-			// A draw gesture only makes one edge at a time; reset the bindable flag
-			// once the gesture ends (successful or cancelled) so the toggle button in
-			// the consuming page automatically flips back to its "off" state, rather
-			// than staying stuck in draw mode (which disables normal node dragging).
-			core.on('ehstop', () => {
-				edgeDrawMode = false;
+			core.on('cxtdragout', 'node[type = "host"]', (evt) => {
+				if (cxtHoverTarget && cxtHoverTarget.id() === evt.target.id()) {
+					cxtHoverTarget = null;
+				}
+			});
+			core.on('cxttapend', () => {
+				if (cxtSourceHostId && cxtHoverTarget) {
+					const rect = container.getBoundingClientRect();
+					const pos = cxtHoverTarget.renderedPosition();
+					onEdgeCreate({
+						fromHostId: cxtSourceHostId.replace(/^host:/, ''),
+						toHostId: (cxtHoverTarget.id() as string).replace(/^host:/, ''),
+						x: rect.left + pos.x,
+						y: rect.top + pos.y
+					});
+				}
+				cxtSourceHostId = null;
+				cxtHoverTarget = null;
 			});
 		}
 
@@ -537,13 +573,6 @@
 		}
 	});
 
-	// Toggling edgeDrawMode alone (no elements change) doesn't run rebuild(), so
-	// react to it directly against whatever `eh` instance currently exists.
-	$effect(() => {
-		if (edgeDrawMode) eh?.enableDrawMode();
-		else eh?.disableDrawMode();
-	});
-
 	onDestroy(() => {
 		if (flushTimer) {
 			clearTimeout(flushTimer);
@@ -551,7 +580,6 @@
 		}
 		if (resizeTimer) clearTimeout(resizeTimer);
 		resizeObserver?.disconnect();
-		eh?.destroy();
 		cy?.destroy();
 	});
 </script>

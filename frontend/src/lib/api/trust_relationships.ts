@@ -32,6 +32,13 @@ export function createTrustRelationship(
 	return apiSend(`/api/engagements/${engagementId}/trust-relationships`, 'POST', payload);
 }
 
+export function updateTrustRelationship(
+	id: string,
+	payload: TrustRelationshipRequest
+): Promise<TrustRelationship> {
+	return apiSend(`/api/trust-relationships/${id}`, 'PUT', payload);
+}
+
 export function deleteTrustRelationship(id: string): Promise<void> {
 	return apiDelete(`/api/trust-relationships/${id}`);
 }

@@ -40,28 +40,31 @@
 	<ul>
 		{#each checklist.items as item (item.id)}
 			<li>
-				<button
-					class="state state-{item.state}"
-					class:assessment-exploit={item.assessment === 'exploit'}
-					onclick={() => cycleState(item.id, item.state, item.assessment)}
-				>
-					{item.state}
-				</button>
-				<select
-					class="assessment"
-					value={item.assessment}
-					onchange={(e) =>
-						changeAssessment(
-							item.id,
-							item.state,
-							(e.target as HTMLSelectElement).value as ChecklistItemAssessment
-						)}
-				>
-					<option value="undecided">Undecided</option>
-					<option value="safe">Safe</option>
-					<option value="exploit">EXPLOIT</option>
-				</select>
+				<div class="controls">
+					<button
+						class="state state-{item.state}"
+						class:assessment-exploit={item.assessment === 'exploit'}
+						onclick={() => cycleState(item.id, item.state, item.assessment)}
+					>
+						{item.state}
+					</button>
+					<select
+						class="assessment"
+						value={item.assessment}
+						onchange={(e) =>
+							changeAssessment(
+								item.id,
+								item.state,
+								(e.target as HTMLSelectElement).value as ChecklistItemAssessment
+							)}
+					>
+						<option value="undecided">Undecided</option>
+						<option value="safe">Safe</option>
+						<option value="exploit">EXPLOIT</option>
+					</select>
+				</div>
 				<span
+					class="description"
 					class:done={item.state === 'done'}
 					class:na={item.state === 'na'}
 					class:exploit={item.assessment === 'exploit'}>{item.text}</span
@@ -87,12 +90,24 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.85rem;
 	}
 	li {
 		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.35rem;
+		min-width: 0;
+	}
+	.controls {
+		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+	}
+	.description {
+		min-width: 0;
+		overflow-wrap: break-word;
+		word-break: break-word;
 	}
 	.state {
 		font-size: 0.7rem;

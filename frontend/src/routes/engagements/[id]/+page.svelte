@@ -4,9 +4,6 @@
 	import { onMount } from 'svelte';
 	import type { ElementDefinition } from 'cytoscape';
 	import { getGraph } from '$lib/api/graph';
-	import { listHosts } from '$lib/api/hosts';
-	import type { Host } from '$lib/api/hosts';
-	import { createTrustRelationship } from '$lib/api/trust_relationships';
 	import AttackGraph from '$lib/components/AttackGraph.svelte';
 	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
 	import GraphContextMenu from '$lib/components/GraphContextMenu.svelte';
@@ -15,7 +12,6 @@
 	const engagementId = $page.params.id as string;
 
 	let elements = $state<ElementDefinition[]>([]);
-	let hosts = $state<Host[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 	let selected = $state<{ id: string; type: string; data: Record<string, unknown> } | null>(null);
@@ -32,19 +28,12 @@
 		x: number;
 		y: number;
 	} | null>(null);
-	let edgeDrawMode = $state(false);
-
-	let trustFromHostId = $state('');
-	let trustToHostId = $state('');
-	let trustKind = $state('domain_trust');
-	let trustNote = $state('');
 
 	async function load() {
 		loading = true;
 		error = '';
 		try {
-			const [graph, hostList] = await Promise.all([getGraph(engagementId), listHosts(engagementId)]);
-			hosts = hostList;
+			const graph = await getGraph(engagementId);
 			elements = [...graph.nodes, ...graph.edges] as ElementDefinition[];
 		} catch {
 			error = 'Failed to load attack graph.';
@@ -58,69 +47,18 @@
 	function handleHostDblClick(hostId: string) {
 		goto(`/engagements/${engagementId}/hosts/${hostId}`);
 	}
-
-	async function handleAddTrust(e: SubmitEvent) {
-		e.preventDefault();
-		if (!trustFromHostId || !trustToHostId) return;
-		try {
-			await createTrustRelationship(engagementId, {
-				from_host_id: trustFromHostId,
-				to_host_id: trustToHostId,
-				kind: trustKind,
-				note: trustNote || null
-			});
-			trustFromHostId = '';
-			trustToHostId = '';
-			trustNote = '';
-			error = '';
-			await load();
-		} catch {
-			error = 'Failed to add trust relationship.';
-		}
-	}
 </script>
 
 <main>
 	<h1>Attack Graph</h1>
 	<p class="muted">
-		Double-click a host node to open its host page. Right-click the graph for more actions.
+		Double-click a host node to open its host page. Right-click the graph for more actions, or
+		hold right-click and drag from one host to another to create a relationship.
 	</p>
 
 	{#if error}
 		<p class="error">{error}</p>
 	{/if}
-
-	<form onsubmit={handleAddTrust} class="trust-form">
-		<select bind:value={trustFromHostId}>
-			<option value="" disabled selected>From host…</option>
-			{#each hosts as host (host.id)}
-				<option value={host.id}>{host.label}</option>
-			{/each}
-		</select>
-		<select bind:value={trustKind}>
-			<option value="domain_trust">domain trust</option>
-			<option value="admin_of">admin of</option>
-			<option value="shares_creds">shares creds</option>
-			<option value="session">session</option>
-		</select>
-		<select bind:value={trustToHostId}>
-			<option value="" disabled selected>To host…</option>
-			{#each hosts as host (host.id)}
-				<option value={host.id}>{host.label}</option>
-			{/each}
-		</select>
-		<input bind:value={trustNote} placeholder="note (optional)" />
-		<button type="submit">Add relationship</button>
-	</form>
-
-	<button
-		type="button"
-		class="draw-toggle"
-		class:active={edgeDrawMode}
-		onclick={() => (edgeDrawMode = !edgeDrawMode)}
-	>
-		{edgeDrawMode ? 'Cancel drawing (drag between two hosts)' : '🔗 Draw relationship'}
-	</button>
 
 	<div class="layout">
 		{#if loading}
@@ -132,7 +70,6 @@
 				onNodeSelect={(s) => (selected = s)}
 				onContextMenu={(info) => (contextMenu = info)}
 				onEdgeCreate={(info) => (relationshipDraft = info)}
-				bind:edgeDrawMode
 				positions={{ engagementId, persist: true }}
 			/>
 		{/if}
@@ -170,23 +107,8 @@
 	.error {
 		color: var(--error);
 	}
-	.trust-form {
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-		align-items: center;
-		margin-bottom: 1rem;
-	}
 	.layout {
 		height: 70vh;
-	}
-	.draw-toggle {
-		margin-bottom: 0.75rem;
-	}
-	.draw-toggle.active {
-		background: var(--accent);
-		color: #fff;
-		border-color: var(--accent-strong);
 	}
 	.muted {
 		color: var(--text-muted);

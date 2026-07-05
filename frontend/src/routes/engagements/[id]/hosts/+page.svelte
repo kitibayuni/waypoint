@@ -32,7 +32,6 @@
 		x: number;
 		y: number;
 	} | null>(null);
-	let edgeDrawMode = $state(false);
 
 	let showNewHostForm = $state(false);
 	let newLabel = $state('');
@@ -106,7 +105,8 @@
 	<p><a href={`/engagements/${engagementId}`}>&larr; Engagement overview</a></p>
 	<h1>Hosts</h1>
 	<p class="muted">
-		Double-click a host node to open its host page. Right-click the graph for more actions.
+		Double-click a host node to open its host page. Right-click the graph for more actions, or
+		hold right-click and drag from one host to another to create a relationship.
 	</p>
 
 	{#if error}
@@ -115,14 +115,6 @@
 
 	<button type="button" class="toggle-form" onclick={() => (showNewHostForm = !showNewHostForm)}>
 		{showNewHostForm ? 'Cancel' : '+ New host'}
-	</button>
-	<button
-		type="button"
-		class="toggle-form draw-toggle"
-		class:active={edgeDrawMode}
-		onclick={() => (edgeDrawMode = !edgeDrawMode)}
-	>
-		{edgeDrawMode ? 'Cancel drawing (drag between two hosts)' : '🔗 Draw relationship'}
 	</button>
 
 	{#if showNewHostForm}
@@ -175,7 +167,6 @@
 				onNodeSelect={(s) => (selected = s)}
 				onContextMenu={(info) => (contextMenu = info)}
 				onEdgeCreate={(info) => (relationshipDraft = info)}
-				bind:edgeDrawMode
 				positions={{ engagementId, persist: true }}
 			/>
 		{/if}
@@ -218,14 +209,6 @@
 	}
 	.toggle-form {
 		margin-bottom: 0.75rem;
-	}
-	.draw-toggle {
-		margin-left: 0.5rem;
-	}
-	.draw-toggle.active {
-		background: var(--accent);
-		color: #fff;
-		border-color: var(--accent-strong);
 	}
 	.new-host-form {
 		display: flex;

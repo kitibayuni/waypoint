@@ -80,9 +80,10 @@ pub async fn build_graph(
         from_host_id: Uuid,
         to_host_id: Uuid,
         kind: String,
+        note: Option<String>,
     }
     let trusts: Vec<TrustRow> = sqlx::query_as(
-        "SELECT id, from_host_id, to_host_id, kind::text AS kind
+        "SELECT id, from_host_id, to_host_id, kind::text AS kind, note
          FROM trust_relationships
          WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR discovered_at <= $2)",
     )
@@ -200,6 +201,8 @@ pub async fn build_graph(
                 "target": format!("host:{}", t.to_host_id),
                 "type": "trust",
                 "label": t.kind,
+                "kind": t.kind,
+                "note": t.note,
             }
         }));
     }

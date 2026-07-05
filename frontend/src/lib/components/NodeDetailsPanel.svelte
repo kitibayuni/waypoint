@@ -3,7 +3,11 @@
 	import type { Host } from '$lib/api/hosts';
 	import { getCredential, revealCredential } from '$lib/api/credentials';
 	import type { Credential } from '$lib/api/credentials';
-	import { createTrustRelationship } from '$lib/api/trust_relationships';
+	import {
+		createTrustRelationship,
+		updateTrustRelationship,
+		deleteTrustRelationship
+	} from '$lib/api/trust_relationships';
 	import { getServiceChecklist } from '$lib/api/checklists';
 	import type { Checklist } from '$lib/api/checklists';
 	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
@@ -20,6 +24,10 @@
 		onChanged: () => void;
 	} = $props();
 
+	const MIN_PANEL_WIDTH = 280;
+	const MAX_PANEL_WIDTH = 720;
+	const DEFAULT_PANEL_WIDTH = 384; // 24rem
+
 	let panelEl = $state<HTMLElement>();
 	let host = $state<Host | null>(null);
 	let credential = $state<Credential | null>(null);
@@ -27,11 +35,20 @@
 	let loading = $state(false);
 	let error = $state('');
 	let revealedSecret = $state('');
+	let panelWidth = $state(
+		typeof localStorage !== 'undefined'
+			? Number(localStorage.getItem('nodeDetailsPanelWidth')) || DEFAULT_PANEL_WIDTH
+			: DEFAULT_PANEL_WIDTH
+	);
+	let resizing = $state(false);
 
 	let newLabel = $state('');
 	let newHostname = $state('');
 	let newAddresses = $state('');
 	let newKind = $state('session');
+
+	let trustKindDraft = $state('session');
+	let trustNoteDraft = $state('');
 
 	async function load() {
 		host = null;
@@ -50,6 +67,10 @@
 				// A 404 here just means this service's type has no mapped checklist
 				// template (or none instantiated yet) -- an expected, non-error state.
 				serviceChecklist = await getServiceChecklist(selection.id).catch(() => null);
+			} else if (selection.type === 'trust') {
+				// Already fully present in the edge's own data -- no fetch needed.
+				trustKindDraft = (selection.data.kind as string) ?? 'session';
+				trustNoteDraft = (selection.data.note as string) ?? '';
 			}
 		} catch {
 			error = 'Failed to load details.';
@@ -64,11 +85,37 @@
 	});
 
 	function handleDocumentClick(e: MouseEvent) {
-		if (!selection) return;
+		if (!selection || resizing) return;
 		const target = e.target as Node;
 		if (panelEl && !panelEl.contains(target) && !(target as Element).closest?.('.graph-container')) {
 			onClose();
 		}
+	}
+
+	function startResize(e: MouseEvent) {
+		e.preventDefault();
+		resizing = true;
+		const startX = e.clientX;
+		const startWidth = panelWidth;
+
+		function onMove(ev: MouseEvent) {
+			// Panel is anchored to the right edge, so dragging left (negative dx)
+			// should widen it.
+			const dx = startX - ev.clientX;
+			panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, startWidth + dx));
+		}
+		function onUp() {
+			window.removeEventListener('mousemove', onMove);
+			window.removeEventListener('mouseup', onUp);
+			localStorage.setItem('nodeDetailsPanelWidth', String(panelWidth));
+			// The mouseup ending this drag also fires a native click afterward;
+			// defer clearing `resizing` so handleDocumentClick still ignores that
+			// one click instead of misreading it as an outside click that should
+			// close the panel (same class of bug fixed earlier for RelationshipPopup).
+			setTimeout(() => (resizing = false), 0);
+		}
+		window.addEventListener('mousemove', onMove);
+		window.addEventListener('mouseup', onUp);
 	}
 
 	async function toggleFoothold() {
@@ -128,12 +175,54 @@
 			error = 'Failed to add host (check the IP address format).';
 		}
 	}
+
+	async function handleUpdateTrust(e: SubmitEvent) {
+		e.preventDefault();
+		if (!selection) return;
+		try {
+			await updateTrustRelationship(selection.id, {
+				from_host_id: (selection.data.source as string).replace(/^host:/, ''),
+				to_host_id: (selection.data.target as string).replace(/^host:/, ''),
+				kind: trustKindDraft,
+				note: trustNoteDraft || null
+			});
+			error = '';
+			onChanged();
+		} catch {
+			error = 'Failed to update relationship.';
+		}
+	}
+
+	async function handleDeleteTrust() {
+		if (!selection) return;
+		if (!confirm('Delete this relationship? This cannot be undone.')) return;
+		try {
+			await deleteTrustRelationship(selection.id);
+			onChanged();
+			onClose();
+		} catch {
+			error = 'Failed to delete relationship.';
+		}
+	}
 </script>
 
 <svelte:document onclick={handleDocumentClick} />
 
 {#if selection}
-	<aside class="panel" class:open={!!selection} bind:this={panelEl}>
+	<aside
+		class="panel"
+		class:open={!!selection}
+		bind:this={panelEl}
+		style={`width: ${panelWidth}px`}
+	>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			class="resize-handle"
+			onmousedown={startResize}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize panel"
+		></div>
 		<div class="panel-header">
 			<h2>{selection.data.label}</h2>
 			<button type="button" class="close" onclick={onClose} aria-label="Close">&times;</button>
@@ -254,6 +343,26 @@
 			{:else}
 				<p class="muted">No checklist for this service.</p>
 			{/if}
+		{:else if selection.type === 'trust'}
+			<form onsubmit={handleUpdateTrust}>
+				<label>
+					Kind
+					<select bind:value={trustKindDraft}>
+						<option value="domain_trust">domain trust</option>
+						<option value="admin_of">admin of</option>
+						<option value="shares_creds">shares creds</option>
+						<option value="session">session</option>
+					</select>
+				</label>
+				<label>
+					Note
+					<input bind:value={trustNoteDraft} placeholder="note (optional)" />
+				</label>
+				<div class="secret-row">
+					<button type="submit">Save</button>
+					<button type="button" onclick={handleDeleteTrust}>Delete</button>
+				</div>
+			</form>
 		{/if}
 	</aside>
 {/if}
@@ -264,7 +373,6 @@
 		top: 0;
 		right: 0;
 		height: 100dvh;
-		width: 24rem;
 		max-width: 90vw;
 		overflow-y: auto;
 		background: var(--surface);
@@ -275,6 +383,19 @@
 		z-index: 50;
 		transform: translateX(0);
 		transition: transform 0.15s ease-out;
+	}
+	.resize-handle {
+		position: absolute;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		width: 6px;
+		cursor: ew-resize;
+		z-index: 51;
+	}
+	.resize-handle:hover {
+		background: var(--accent);
+		opacity: 0.5;
 	}
 	.panel-header {
 		display: flex;
