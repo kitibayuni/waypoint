@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
+	import { clampToViewport } from '$lib/actions/clampToViewport';
 
 	let {
 		info,
@@ -28,15 +29,6 @@
 	$effect(() => {
 		const timer = setTimeout(() => (listenForOutsideClicks = true), 0);
 		return () => clearTimeout(timer);
-	});
-
-	$effect(() => {
-		if (!popupEl) return;
-		const rect = popupEl.getBoundingClientRect();
-		const overflowX = rect.right - window.innerWidth;
-		const overflowY = rect.bottom - window.innerHeight;
-		popupEl.style.left = `${overflowX > 0 ? Math.max(0, info.x - overflowX) : info.x}px`;
-		popupEl.style.top = `${overflowY > 0 ? Math.max(0, info.y - overflowY) : info.y}px`;
 	});
 
 	function handleDocumentClick(e: MouseEvent) {
@@ -68,7 +60,7 @@
 
 <svelte:document onclick={handleDocumentClick} onkeydown={handleKeydown} />
 
-<form class="popup" bind:this={popupEl} onsubmit={handleConfirm}>
+<form class="popup" bind:this={popupEl} use:clampToViewport={{ x: info.x, y: info.y }} onsubmit={handleConfirm}>
 	<h3>Add relationship</h3>
 	{#if error}
 		<p class="error">{error}</p>

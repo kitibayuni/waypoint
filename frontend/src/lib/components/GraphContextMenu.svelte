@@ -4,6 +4,7 @@
 	import { createFinding } from '$lib/api/findings';
 	import { createTrustRelationship } from '$lib/api/trust_relationships';
 	import { createService, deleteService, SERVICE_NAMES } from '$lib/api/services';
+	import { clampToViewport } from '$lib/actions/clampToViewport';
 
 	let {
 		info,
@@ -48,18 +49,6 @@
 	let svcName = $state('');
 	let svcDisplayName = $state('');
 	let svcVersion = $state('');
-
-	// Re-clamp whenever the menu's content changes size (e.g. switching from the
-	// top-level menu to a bigger add-form), not just once at mount.
-	$effect(() => {
-		void mode;
-		if (!menuEl) return;
-		const rect = menuEl.getBoundingClientRect();
-		const overflowX = rect.right - window.innerWidth;
-		const overflowY = rect.bottom - window.innerHeight;
-		menuEl.style.left = `${overflowX > 0 ? Math.max(0, info.x - overflowX) : info.x}px`;
-		menuEl.style.top = `${overflowY > 0 ? Math.max(0, info.y - overflowY) : info.y}px`;
-	});
 
 	function handleDocumentClick(e: MouseEvent) {
 		// Use composedPath() rather than e.target: clicking a menu item can swap
@@ -184,7 +173,7 @@
 
 <svelte:document onclick={handleDocumentClick} onkeydown={handleKeydown} />
 
-<div class="menu" style={`left: ${info.x}px; top: ${info.y}px;`} bind:this={menuEl}>
+<div class="menu" bind:this={menuEl} use:clampToViewport={{ x: info.x, y: info.y }}>
 	{#if error}
 		<p class="error">{error}</p>
 	{/if}
