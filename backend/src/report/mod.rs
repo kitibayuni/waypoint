@@ -46,6 +46,7 @@ fn severity_color(severity: &Option<String>) -> &'static str {
     }
 }
 
+#[derive(sqlx::FromRow)]
 struct EngRow {
     name: String,
     status: String,
@@ -55,12 +56,14 @@ struct EngRow {
     client_name: String,
 }
 
+#[derive(sqlx::FromRow)]
 struct ScopeRow {
     kind: String,
     value: String,
     in_scope: bool,
 }
 
+#[derive(sqlx::FromRow)]
 struct FindingRow {
     title: String,
     cve: Option<String>,
@@ -74,58 +77,32 @@ struct FindingRow {
     affected_hosts: Value,
 }
 
-/// Renders the full engagement report as a standalone HTML document
-/// (Executive Summary, Overview/Methodology, Scope & Duration, Findings
-/// grouped by severity) per notes/on-reporting.txt's structure. Returns
-/// `None` if the engagement doesn't exist.
-pub async fn render_html(pool: &PgPool, engagement_id: Uuid) -> Result<Option<String>, sqlx::Error> {
-    let eng = sqlx::query_as::<_, (String, String, Option<NaiveDate>, Option<NaiveDate>, String, String)>(
+async fn fetch_engagement_row(pool: &PgPool, engagement_id: Uuid) -> Result<Option<EngRow>, sqlx::Error> {
+    sqlx::query_as::<_, EngRow>(
         "SELECT e.name, e.status::text AS status, e.start_date, e.end_date,
                 e.global_notes_md, c.name AS client_name
          FROM engagements e JOIN clients c ON c.id = e.client_id WHERE e.id = $1",
     )
     .bind(engagement_id)
     .fetch_optional(pool)
-    .await?
-    .map(|(name, status, start_date, end_date, global_notes_md, client_name)| EngRow {
-        name,
-        status,
-        start_date,
-        end_date,
-        global_notes_md,
-        client_name,
-    });
+    .await
+}
 
-    let Some(eng) = eng else {
-        return Ok(None);
-    };
-
-    let scope: Vec<ScopeRow> = sqlx::query_as::<_, (String, String, bool)>(
+async fn fetch_scope(pool: &PgPool, engagement_id: Uuid) -> Result<Vec<ScopeRow>, sqlx::Error> {
+    sqlx::query_as::<_, ScopeRow>(
         "SELECT kind::text AS kind, value, in_scope FROM scope_items WHERE engagement_id = $1
          ORDER BY kind, value",
     )
     .bind(engagement_id)
     .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|(kind, value, in_scope)| ScopeRow { kind, value, in_scope })
-    .collect();
+    .await
+}
 
-    let findings: Vec<FindingRow> = sqlx::query_as::<
-        _,
-        (
-            String,
-            Option<String>,
-            Option<String>,
-            Option<f64>,
-            Option<String>,
-            String,
-            String,
-            String,
-            Value,
-            Value,
-        ),
-    >(
+/// Findings are fetched with their affected hosts pre-aggregated (rather
+/// than a separate query per finding) since a report can have dozens of
+/// findings and this is a one-shot render, not an interactive page.
+async fn fetch_findings(pool: &PgPool, engagement_id: Uuid) -> Result<Vec<FindingRow>, sqlx::Error> {
+    let mut findings: Vec<FindingRow> = sqlx::query_as::<_, FindingRow>(
         "SELECT f.title, f.cve, f.cvss_vector, f.cvss_score::float8 AS cvss_score, f.severity,
                 f.description_md, f.remediation_md, f.poc_md, f.references_json,
                 COALESCE(jsonb_agg(DISTINCT h.label) FILTER (WHERE h.id IS NOT NULL), '[]') AS affected_hosts
@@ -137,37 +114,22 @@ pub async fn render_html(pool: &PgPool, engagement_id: Uuid) -> Result<Option<St
     )
     .bind(engagement_id)
     .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(
-        |(
-            title,
-            cve,
-            cvss_vector,
-            cvss_score,
-            severity,
-            description_md,
-            remediation_md,
-            poc_md,
-            references_json,
-            affected_hosts,
-        )| FindingRow {
-            title,
-            cve,
-            cvss_vector,
-            cvss_score,
-            severity,
-            description_md,
-            remediation_md,
-            poc_md,
-            references_json,
-            affected_hosts,
-        },
-    )
-    .collect();
+    .await?;
 
-    let mut findings = findings;
     findings.sort_by_key(|f| severity_rank(&f.severity));
+    Ok(findings)
+}
+
+/// Renders the full engagement report as a standalone HTML document
+/// (Executive Summary, Overview/Methodology, Scope & Duration, Findings
+/// grouped by severity) per notes/on-reporting.txt's structure. Returns
+/// `None` if the engagement doesn't exist.
+pub async fn render_html(pool: &PgPool, engagement_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let Some(eng) = fetch_engagement_row(pool, engagement_id).await? else {
+        return Ok(None);
+    };
+    let scope = fetch_scope(pool, engagement_id).await?;
+    let findings = fetch_findings(pool, engagement_id).await?;
 
     let mut severity_counts: BTreeMap<String, usize> = BTreeMap::new();
     for f in &findings {
