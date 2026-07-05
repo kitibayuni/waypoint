@@ -8,6 +8,7 @@
 	import NodeDetailsPanel from '$lib/components/NodeDetailsPanel.svelte';
 	import GraphContextMenu from '$lib/components/GraphContextMenu.svelte';
 	import RelationshipPopup from '$lib/components/RelationshipPopup.svelte';
+	import ChecklistSidePanel from '$lib/components/ChecklistSidePanel.svelte';
 
 	const engagementId = $page.params.id as string;
 
@@ -59,6 +60,8 @@
 	{#if error}
 		<p class="error">{error}</p>
 	{/if}
+
+	<ChecklistSidePanel {engagementId} />
 
 	<div class="layout">
 		{#if loading}

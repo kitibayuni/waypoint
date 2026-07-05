@@ -89,6 +89,29 @@ async fn list_host_checklists(
     Ok(Json(checklists))
 }
 
+/// Every checklist across an engagement in one call, for the attack graph's
+/// checklist side panel (host list + "ALL HOSTS" to-do aggregate) -- avoids an
+/// N+1 of `list_host_checklists` per host on the frontend.
+async fn list_engagement_checklists(
+    State(state): State<AppState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(engagement_id): Path<Uuid>,
+) -> Result<Json<Vec<Checklist>>, StatusCode> {
+    require_role(&state.pool, &user, engagement_id, EngagementRole::Viewer).await?;
+
+    let checklists = sqlx::query_as::<_, Checklist>(&format!(
+        "{CHECKLIST_SELECT} LEFT JOIN hosts h ON h.id = c.host_id
+         WHERE h.engagement_id = $1 OR c.engagement_id = $1
+         GROUP BY c.id ORDER BY c.created_at"
+    ))
+    .bind(engagement_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(checklists))
+}
+
 /// The checklist a specific service "owns" isn't a direct FK -- it's whichever
 /// checklist on the service's host was auto-instantiated from the template
 /// mapped to that service's name (see `routes::services::maybe_auto_checklist`).
@@ -173,6 +196,10 @@ async fn update_checklist_item(
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/hosts/{host_id}/checklists", get(list_host_checklists))
+        .route(
+            "/engagements/{engagement_id}/checklists",
+            get(list_engagement_checklists),
+        )
         .route("/services/{service_id}/checklist", get(get_service_checklist))
         .route("/checklist-items/{id}", axum::routing::put(update_checklist_item))
 }
