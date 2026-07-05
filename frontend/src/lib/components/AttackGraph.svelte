@@ -114,7 +114,7 @@
 			// The .dormant class is (re)computed in rebuild() from live edge data.
 			{
 				selector: 'node[type = "service"].dormant',
-				style: { 'background-color': '#3a3a3a', 'background-opacity': 0.3 }
+				style: { 'background-color': '#3a3a3a', 'background-opacity': 0.18 }
 			},
 			// Border rather than background, since background already encodes
 			// host/credential/foothold identity -- matches the --warning design token.
