@@ -56,6 +56,9 @@
 	let flushTimer: ReturnType<typeof setTimeout> | null = null;
 	let resizeObserver: ResizeObserver | null = null;
 	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+	let contextMenuDocHandler: ((e: MouseEvent) => void) | null = null;
+	let cxtPreviewNode: NodeSingular | null = null;
+	let cxtPreviewEdge: EdgeSingular | null = null;
 
 	function buildStyle(): any[] {
 		const styles: any[] = [
@@ -342,6 +345,12 @@
 		cy?.destroy();
 		resizeObserver?.disconnect();
 		resizeObserver = null;
+		if (contextMenuDocHandler) {
+			document.removeEventListener('contextmenu', contextMenuDocHandler);
+			contextMenuDocHandler = null;
+		}
+		cxtPreviewNode = null;
+		cxtPreviewEdge = null;
 
 		const engId = positions?.engagementId;
 		let preparedElements = elements;
@@ -439,6 +448,14 @@
 
 		if (onContextMenu) {
 			container.oncontextmenu = (e) => e.preventDefault();
+			// Belt-and-braces: also catch it at the document level in case a
+			// right-click-drag gesture ends with the pointer having strayed
+			// outside the container's own bounds before release, which the
+			// container-scoped handler above wouldn't see.
+			contextMenuDocHandler = (e: MouseEvent) => {
+				if (container.contains(e.target as Node)) e.preventDefault();
+			};
+			document.addEventListener('contextmenu', contextMenuDocHandler);
 			core.on('cxttap', 'node', (evt) => {
 				const original = evt.originalEvent as MouseEvent;
 				const type = evt.target.data('type');
@@ -470,9 +487,44 @@
 			let cxtSourceHostId: string | null = null;
 			let cxtHoverTarget: NodeSingular | null = null;
 
+			const clearCxtPreview = () => {
+				cxtPreviewEdge?.remove();
+				cxtPreviewNode?.remove();
+				cxtPreviewEdge = null;
+				cxtPreviewNode = null;
+			};
+
 			core.on('cxttapstart', 'node[type = "host"]', (evt) => {
 				cxtSourceHostId = evt.target.id();
 				cxtHoverTarget = null;
+				clearCxtPreview();
+				// A small ghost node that tracks the cursor, plus a real edge from
+				// the source host to it -- neither carries a `type`, so they're
+				// invisible to every other type-based selector/query in this file.
+				const added = core.add([
+					{ group: 'nodes', data: { id: '__cxt-preview-node__' }, position: { ...evt.target.position() } },
+					{
+						group: 'edges',
+						data: { id: '__cxt-preview-edge__', source: cxtSourceHostId, target: '__cxt-preview-node__' }
+					}
+				]);
+				cxtPreviewNode = added[0] as unknown as NodeSingular;
+				cxtPreviewEdge = added[1] as unknown as EdgeSingular;
+				cxtPreviewNode.style({ opacity: 0, width: 1, height: 1, events: 'no' });
+				cxtPreviewEdge.style({
+					'line-color': '#e0b23f',
+					'target-arrow-color': '#e0b23f',
+					'target-arrow-shape': 'triangle',
+					'line-style': 'dashed',
+					'curve-style': 'straight',
+					width: 2,
+					events: 'no'
+				});
+			});
+			// Unfiltered (core-level) so it tracks the cursor no matter what's
+			// underneath it, not just while hovering a specific host.
+			core.on('cxtdrag', (evt) => {
+				cxtPreviewNode?.position({ ...evt.position });
 			});
 			core.on('cxtdragover', 'node[type = "host"]', (evt) => {
 				if (cxtSourceHostId && evt.target.id() !== cxtSourceHostId) {
@@ -495,6 +547,7 @@
 						y: rect.top + pos.y
 					});
 				}
+				clearCxtPreview();
 				cxtSourceHostId = null;
 				cxtHoverTarget = null;
 			});
@@ -580,6 +633,7 @@
 		}
 		if (resizeTimer) clearTimeout(resizeTimer);
 		resizeObserver?.disconnect();
+		if (contextMenuDocHandler) document.removeEventListener('contextmenu', contextMenuDocHandler);
 		cy?.destroy();
 	});
 </script>
