@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import cytoscape from 'cytoscape';
-	import type { Core, ElementDefinition } from 'cytoscape';
+	import type { Core, EdgeSingular, ElementDefinition } from 'cytoscape';
 	import edgehandles from 'cytoscape-edgehandles';
 	import { listNodePositions, putNodePositions } from '$lib/api/node_positions';
 
@@ -489,6 +489,38 @@
 			core.on('dragfree', 'node', (evt) => {
 				const p = evt.target.position();
 				commitPosition(evt.target.id(), { x: p.x, y: p.y });
+			});
+
+			// Dragging a host should carry its satellite services along with it --
+			// otherwise they'd be left behind with only the has-service connector
+			// stretching to follow, instead of moving as a group like a real
+			// satellite would.
+			let hostDragStart: { x: number; y: number } | null = null;
+			let satelliteStarts: Record<string, { x: number; y: number }> = {};
+			core.on('grab', 'node[type = "host"]', (evt) => {
+				hostDragStart = { ...evt.target.position() };
+				satelliteStarts = {};
+				evt.target.connectedEdges('[type = "has-service"]').forEach((edge: EdgeSingular) => {
+					const svc = edge.target();
+					satelliteStarts[svc.id()] = { ...svc.position() };
+				});
+			});
+			core.on('drag', 'node[type = "host"]', (evt) => {
+				if (!hostDragStart) return;
+				const cur = evt.target.position();
+				const dx = cur.x - hostDragStart.x;
+				const dy = cur.y - hostDragStart.y;
+				for (const [svcId, start] of Object.entries(satelliteStarts)) {
+					core.getElementById(svcId).position({ x: start.x + dx, y: start.y + dy });
+				}
+			});
+			core.on('dragfree', 'node[type = "host"]', () => {
+				for (const svcId of Object.keys(satelliteStarts)) {
+					const p = core.getElementById(svcId).position();
+					commitPosition(svcId, { x: p.x, y: p.y });
+				}
+				hostDragStart = null;
+				satelliteStarts = {};
 			});
 		}
 	}

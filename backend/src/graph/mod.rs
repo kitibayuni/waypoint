@@ -159,12 +159,15 @@ pub async fn build_graph(
     }
 
     for s in &services {
-        // Prefer an explicit display_name; otherwise lead with the service name
-        // (e.g. "mysql") so the node reads clearly rather than just a bare port.
+        // Prefer an explicit display_name; otherwise stack the service name
+        // (e.g. "mysql") above the port/protocol so the node reads clearly
+        // rather than just a bare port. Cytoscape renders literal newlines in
+        // a label as separate lines when text-wrap is 'wrap' (set on every
+        // node), which it already is.
         let label = match &s.display_name {
             Some(dn) if !dn.is_empty() => dn.clone(),
             _ => match &s.name {
-                Some(name) => format!("{name} {}/{}", s.port, s.protocol),
+                Some(name) => format!("{name}\n{}/{}", s.port, s.protocol),
                 None => format!("{}/{}", s.port, s.protocol),
             },
         };
