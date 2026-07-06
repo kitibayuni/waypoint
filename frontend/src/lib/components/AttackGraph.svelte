@@ -471,13 +471,17 @@
 			container.onmouseup = (e) => {
 				if (e.button === 2) e.preventDefault();
 			};
-			// Belt-and-braces: also catch `contextmenu` at the document level in
-			// case a right-click-drag gesture ends with the pointer having strayed
-			// outside the container's own bounds before release, which the
-			// container-scoped handler above wouldn't see.
-			contextMenuDocHandler = (e: MouseEvent) => {
-				if (container.contains(e.target as Node)) e.preventDefault();
-			};
+			// Belt-and-braces: also catch `contextmenu` at the document level,
+			// unconditionally (not just for targets inside `container`). The
+			// custom context menu and its follow-on popups (GraphContextMenu,
+			// RelationshipPopup) render as DOM siblings of the graph container,
+			// not descendants of it -- so a `container.contains(e.target)` guard
+			// misses right-clicks that land on those popups (or anywhere else
+			// while switching rapidly between left/right clicks), letting the
+			// native menu appear in front of our own. This listener only exists
+			// while the graph is mounted and interactive, so suppressing
+			// unconditionally here doesn't affect the rest of the page.
+			contextMenuDocHandler = (e: MouseEvent) => e.preventDefault();
 			document.addEventListener('contextmenu', contextMenuDocHandler);
 		}
 
