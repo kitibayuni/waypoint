@@ -1,6 +1,7 @@
 pub mod bloodhound;
 pub mod nessus;
 pub mod nmap;
+pub mod openvas;
 
 /// Every importer normalizes to this same shape regardless of source format,
 /// so the route handler's matching/dedup/write logic is written once. Nmap

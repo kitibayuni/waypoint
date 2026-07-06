@@ -111,6 +111,24 @@ pub async fn build_graph(
     .fetch_all(pool)
     .await?;
 
+    #[derive(sqlx::FromRow)]
+    struct PivotRow {
+        id: Uuid,
+        from_host_id: Uuid,
+        to_host_id: Option<Uuid>,
+        method: String,
+        remote_target: Option<String>,
+    }
+    let pivots: Vec<PivotRow> = sqlx::query_as(
+        "SELECT id, from_host_id, to_host_id, method::text AS method, remote_target
+         FROM pivot_tunnels
+         WHERE engagement_id = $1 AND ($2::timestamptz IS NULL OR created_at <= $2)",
+    )
+    .bind(engagement_id)
+    .bind(as_of)
+    .fetch_all(pool)
+    .await?;
+
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
 
@@ -215,6 +233,35 @@ pub async fn build_graph(
                 "target": format!("host:{}", u.host_id),
                 "type": "cred-reuse",
                 "label": u.privilege.clone().unwrap_or_else(|| "works".to_string()),
+            }
+        }));
+    }
+
+    for p in &pivots {
+        // A tunnel commonly opens up a whole subnet rather than one specific
+        // host (to_host_id null) -- synthesize a small non-host node for it,
+        // same technique as the right-click-drag ghost node: no `type` field,
+        // so it's invisible to every other type-based selector/query.
+        let target = match p.to_host_id {
+            Some(to_id) => format!("host:{to_id}"),
+            None => {
+                let segment_id = format!("network:{}", p.id);
+                nodes.push(json!({
+                    "data": {
+                        "id": segment_id,
+                        "label": p.remote_target.clone().unwrap_or_else(|| "network segment".to_string()),
+                    }
+                }));
+                segment_id
+            }
+        };
+        edges.push(json!({
+            "data": {
+                "id": format!("edge:pivot:{}", p.id),
+                "source": format!("host:{}", p.from_host_id),
+                "target": target,
+                "type": "pivot",
+                "label": p.method,
             }
         }));
     }

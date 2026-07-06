@@ -4,8 +4,11 @@
 //! keep working; `scoped_engagement_id` is routes-specific and lives here.
 
 use axum::http::StatusCode;
-use sqlx::PgPool;
+use serde_json::Value;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
+
+use crate::routes::checklists::insert_checklist_from_template;
 
 pub(crate) use crate::http_error::{OptionExt, ResultExt};
 
@@ -29,4 +32,42 @@ pub(crate) async fn scoped_engagement_id(
         .internal()?
         .map(|(id,)| id)
         .or_404()
+}
+
+/// Auto-instantiates a checklist on `host_id` if `key` maps to a template via
+/// `lookup_sql` (a query selecting `(template_id, template_name, body)` bound
+/// to one text parameter) and one isn't already instantiated there. Shared by
+/// service-name-keyed (`routes::services`) and technology-name-keyed
+/// (`routes::service_technologies`) auto-instantiation, which only differ in
+/// which mapping table `lookup_sql` joins through.
+pub(crate) async fn instantiate_checklist_if_mapped(
+    tx: &mut Transaction<'_, Postgres>,
+    host_id: Uuid,
+    lookup_sql: &str,
+    key: &str,
+) -> Result<(), StatusCode> {
+    let mapped: Option<(Uuid, String, Value)> = sqlx::query_as(lookup_sql)
+        .bind(key)
+        .fetch_optional(&mut **tx)
+        .await
+        .internal()?;
+
+    let Some((template_id, template_name, body)) = mapped else {
+        return Ok(());
+    };
+
+    let already: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM checklists WHERE host_id = $1 AND template_origin_id = $2")
+            .bind(host_id)
+            .bind(template_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .internal()?;
+
+    if already.is_some() {
+        return Ok(());
+    }
+
+    insert_checklist_from_template(tx, Some(host_id), None, &template_name, template_id, &body).await?;
+    Ok(())
 }

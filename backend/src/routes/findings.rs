@@ -15,9 +15,14 @@ use crate::routes::common::{scoped_engagement_id, OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_STATUSES: [&str; 4] = ["open", "triaged", "accepted_risk", "fixed"];
+const VALID_HORIZONS: [&str; 3] = ["short", "medium", "long"];
 
 fn valid_status(s: &str) -> bool {
     VALID_STATUSES.contains(&s)
+}
+
+fn valid_horizon(s: &str) -> bool {
+    VALID_HORIZONS.contains(&s)
 }
 
 fn default_status() -> String {
@@ -43,6 +48,10 @@ pub struct Finding {
     references_json: Value,
     status: String,
     mitre_technique_ids: Value,
+    remediation_horizon: Option<String>,
+    retested_at: Option<DateTime<Utc>>,
+    retested_by_name: Option<String>,
+    retest_notes_md: String,
     created_at: DateTime<Utc>,
     #[sqlx(json)]
     affected_hosts: Vec<AffectedHost>,
@@ -56,14 +65,18 @@ pub struct AffectedHost {
 
 const FINDING_SELECT: &str = "SELECT f.id, f.engagement_id, f.title, f.cve, f.cvss_vector,
     f.cvss_score::float8 AS cvss_score, f.severity, f.description_md, f.remediation_md, f.poc_md,
-    f.references_json, f.status::text AS status, f.mitre_technique_ids, f.created_at,
+    f.references_json, f.status::text AS status, f.mitre_technique_ids,
+    f.remediation_horizon::text AS remediation_horizon, f.retested_at,
+    MAX(ru.display_name) AS retested_by_name,
+    f.retest_notes_md, f.created_at,
     COALESCE(
         jsonb_agg(DISTINCT jsonb_build_object('id', h.id, 'label', h.label)) FILTER (WHERE h.id IS NOT NULL),
         '[]'
     ) AS affected_hosts
     FROM findings f
     LEFT JOIN finding_hosts fh ON fh.finding_id = f.id
-    LEFT JOIN hosts h ON h.id = fh.host_id";
+    LEFT JOIN hosts h ON h.id = fh.host_id
+    LEFT JOIN users ru ON ru.id = f.retested_by";
 
 #[derive(Deserialize)]
 pub struct FindingRequest {
@@ -86,6 +99,7 @@ pub struct FindingRequest {
     mitre_technique_ids: Value,
     #[serde(default)]
     affected_host_ids: Vec<Uuid>,
+    remediation_horizon: Option<String>,
 }
 
 fn normalize_refs(v: Value) -> Value {
@@ -125,6 +139,11 @@ async fn create_finding(
     if !valid_status(&payload.status) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if let Some(h) = &payload.remediation_horizon
+        && !valid_horizon(h)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let mut tx = state
         .pool
@@ -134,8 +153,9 @@ async fn create_finding(
 
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO findings (engagement_id, title, cve, cvss_vector, cvss_score, severity,
-         description_md, remediation_md, poc_md, references_json, status, mitre_technique_ids)
-         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12)
+         description_md, remediation_md, poc_md, references_json, status, mitre_technique_ids,
+         remediation_horizon)
+         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7, $8, $9, $10, $11::finding_status, $12, $13::remediation_horizon)
          RETURNING id",
     )
     .bind(engagement_id)
@@ -150,6 +170,7 @@ async fn create_finding(
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
     .bind(normalize_refs(payload.mitre_technique_ids.clone()))
+    .bind(&payload.remediation_horizon)
     .fetch_one(&mut *tx)
     .await
     .internal()?;
@@ -208,6 +229,11 @@ async fn update_finding(
     if !valid_status(&payload.status) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if let Some(h) = &payload.remediation_horizon
+        && !valid_horizon(h)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let before = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
         .bind(id)
@@ -225,7 +251,8 @@ async fn update_finding(
     let result = sqlx::query(
         "UPDATE findings SET title = $1, cve = $2, cvss_vector = $3, cvss_score = $4::numeric,
          severity = $5, description_md = $6, remediation_md = $7, poc_md = $8, references_json = $9,
-         status = $10::finding_status, mitre_technique_ids = $11 WHERE id = $12",
+         status = $10::finding_status, mitre_technique_ids = $11, remediation_horizon = $12::remediation_horizon
+         WHERE id = $13",
     )
     .bind(&payload.title)
     .bind(&payload.cve)
@@ -238,6 +265,7 @@ async fn update_finding(
     .bind(normalize_refs(payload.references_json.clone()))
     .bind(&payload.status)
     .bind(normalize_refs(payload.mitre_technique_ids.clone()))
+    .bind(&payload.remediation_horizon)
     .bind(id)
     .execute(&mut *tx)
     .await
@@ -273,6 +301,57 @@ async fn update_finding(
         .internal()?;
 
     log_action(&state.pool, user.id, "update", "finding", id, Some(&before), Some(&finding)).await;
+
+    Ok(Json(finding))
+}
+
+#[derive(Deserialize)]
+pub struct RetestRequest {
+    status: String,
+    #[serde(default)]
+    retest_notes_md: String,
+}
+
+/// Logs a post-remediation retest result in one call -- sets who retested it
+/// and when alongside the outcome, rather than requiring a separate finding
+/// update plus a manually-dated note. Feeds the Post-Remediation report
+/// variant (routes::reports / report::render_html).
+async fn retest_finding(
+    State(state): State<AppState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<RetestRequest>,
+) -> Result<Json<Finding>, StatusCode> {
+    let engagement_id = finding_engagement_id(&state.pool, id).await?;
+    require_role(&state.pool, &user, engagement_id, EngagementRole::Tester).await?;
+
+    if !valid_status(&payload.status) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let result = sqlx::query(
+        "UPDATE findings SET status = $1::finding_status, retest_notes_md = $2,
+         retested_at = now(), retested_by = $3 WHERE id = $4",
+    )
+    .bind(&payload.status)
+    .bind(&payload.retest_notes_md)
+    .bind(user.id)
+    .bind(id)
+    .execute(&state.pool)
+    .await
+    .internal()?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let finding = sqlx::query_as::<_, Finding>(&format!("{FINDING_SELECT} WHERE f.id = $1 GROUP BY f.id"))
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await
+        .internal()?;
+
+    log_action(&state.pool, user.id, "retest", "finding", id, None::<&Finding>, Some(&finding)).await;
 
     Ok(Json(finding))
 }
@@ -354,4 +433,5 @@ pub fn router() -> Router<AppState> {
             get(get_finding).put(update_finding).delete(delete_finding),
         )
         .route("/findings/{id}/history", get(get_finding_history))
+        .route("/findings/{id}/retest", axum::routing::patch(retest_finding))
 }

@@ -4,13 +4,11 @@ use axum::routing::get;
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::authz::{require_role, EngagementRole};
-use crate::routes::checklists::insert_checklist_from_template;
-use crate::routes::common::{OptionExt, ResultExt};
+use crate::routes::common::{instantiate_checklist_if_mapped, OptionExt, ResultExt};
 use crate::routes::hosts::host_engagement_id;
 use crate::state::AppState;
 
@@ -29,12 +27,14 @@ fn default_protocol() -> String {
 }
 
 // Controlled service-type list driving the frontend dropdown; kept in sync with
-// `service_checklist_templates` (0014/0016_*.sql), which maps every value except
-// "other" to a starter checklist template grounded in the operator's own notes.
-const VALID_SERVICE_NAMES: [&str; 24] = [
+// `service_checklist_templates` (0014/0016/0030_*.sql), which maps every value
+// except "other" to a starter checklist template grounded in the operator's
+// own notes.
+const VALID_SERVICE_NAMES: [&str; 37] = [
     "ssh", "ftp", "telnet", "smb", "http", "https", "rdp", "winrm", "mssql", "mysql",
     "postgresql", "ldap", "dns", "snmp", "vnc", "nfs", "smtp", "pop3", "imap", "rsync",
-    "oracle", "ipmi", "rsh", "other",
+    "oracle", "ipmi", "rsh", "redis", "mongodb", "elasticsearch", "cassandra", "memcached",
+    "docker_api", "kubernetes_api", "mqtt", "sip", "rtsp", "ajp", "tftp", "ldaps", "other",
 ];
 
 fn valid_service_name(n: &str) -> bool {
@@ -78,37 +78,17 @@ pub(crate) async fn maybe_auto_checklist(
     host_id: Uuid,
     name: &str,
 ) -> Result<(), StatusCode> {
-    let mapped: Option<(Uuid, String, Value)> = sqlx::query_as(
+    instantiate_checklist_if_mapped(
+        tx,
+        host_id,
         "SELECT t.id, t.name, p.body
          FROM service_checklist_templates sct
          JOIN templates t ON t.id = sct.template_id
          JOIN template_payloads p ON p.template_id = t.id
          WHERE sct.service_name = $1",
+        name,
     )
-    .bind(name)
-    .fetch_optional(&mut **tx)
     .await
-    .internal()?;
-
-    let Some((template_id, template_name, body)) = mapped else {
-        return Ok(());
-    };
-
-    let already: Option<(Uuid,)> = sqlx::query_as(
-        "SELECT id FROM checklists WHERE host_id = $1 AND template_origin_id = $2",
-    )
-    .bind(host_id)
-    .bind(template_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .internal()?;
-
-    if already.is_some() {
-        return Ok(());
-    }
-
-    insert_checklist_from_template(tx, Some(host_id), None, &template_name, template_id, &body).await?;
-    Ok(())
 }
 
 async fn list_services(

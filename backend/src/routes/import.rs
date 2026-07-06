@@ -43,6 +43,7 @@ fn parse_source(source: &str, content: &str) -> Result<ParsedImport, StatusCode>
     match source {
         "nmap" => import::nmap::parse(content).map_err(|_| StatusCode::BAD_REQUEST),
         "nessus" => import::nessus::parse(content).map_err(|_| StatusCode::BAD_REQUEST),
+        "openvas" => import::openvas::parse(content).map_err(|_| StatusCode::BAD_REQUEST),
         "bloodhound" => import::bloodhound::parse(content).map_err(|_| StatusCode::BAD_REQUEST),
         _ => Err(StatusCode::NOT_FOUND),
     }

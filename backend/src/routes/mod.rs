@@ -15,9 +15,11 @@ pub mod members;
 pub mod mitre;
 pub mod node_positions;
 pub mod notes;
+pub mod pivot_tunnels;
 pub mod reports;
 pub mod scope;
 pub mod search;
+pub mod service_technologies;
 pub mod services;
 pub mod timeline;
 pub mod trust_relationships;
@@ -34,11 +36,13 @@ pub fn router() -> Router<AppState> {
         .merge(members::router())
         .merge(hosts::router())
         .merge(services::router())
+        .merge(service_technologies::router())
         .merge(credentials::router())
         .merge(credential_usage::router())
         .merge(trust_relationships::router())
         .merge(graph::router())
         .merge(node_positions::router())
+        .merge(pivot_tunnels::router())
         .merge(checklists::router())
         .merge(notes::router())
         .merge(findings::router())

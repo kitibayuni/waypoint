@@ -24,6 +24,19 @@ export const SERVICE_NAMES = [
 	'oracle',
 	'ipmi',
 	'rsh',
+	'redis',
+	'mongodb',
+	'elasticsearch',
+	'cassandra',
+	'memcached',
+	'docker_api',
+	'kubernetes_api',
+	'mqtt',
+	'sip',
+	'rtsp',
+	'ajp',
+	'tftp',
+	'ldaps',
 	'other'
 ] as const;
 
