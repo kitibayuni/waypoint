@@ -12,9 +12,15 @@ use crate::routes::common::{OptionExt, ResultExt};
 use crate::state::AppState;
 
 const VALID_STATUSES: [&str; 4] = ["planning", "active", "reporting", "closed"];
+const VALID_REPORT_TYPES: [&str; 4] =
+    ["vuln_assessment", "penetration_test", "attestation", "post_remediation"];
 
 fn valid_status(s: &str) -> bool {
     VALID_STATUSES.contains(&s)
+}
+
+fn valid_report_type(s: &str) -> bool {
+    VALID_REPORT_TYPES.contains(&s)
 }
 
 fn default_status() -> String {
@@ -31,6 +37,8 @@ pub struct Engagement {
     start_date: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
     global_notes_md: String,
+    report_type: String,
+    severity_definitions_md: String,
     created_by: Option<Uuid>,
     created_at: DateTime<Utc>,
 }
@@ -54,10 +62,13 @@ pub struct UpdateEngagementRequest {
     start_date: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
     global_notes_md: String,
+    report_type: String,
+    severity_definitions_md: String,
 }
 
 const ENGAGEMENT_SELECT: &str = "SELECT e.id, e.client_id, c.name AS client_name, e.name,
     e.status::text AS status, e.start_date, e.end_date, e.global_notes_md,
+    e.report_type::text AS report_type, e.severity_definitions_md,
     e.created_by, e.created_at
     FROM engagements e JOIN clients c ON c.id = e.client_id";
 
@@ -168,16 +179,22 @@ async fn update_engagement(
     if !valid_status(&payload.status) {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if !valid_report_type(&payload.report_type) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let result = sqlx::query(
         "UPDATE engagements SET name = $1, status = $2::engagement_status, start_date = $3,
-         end_date = $4, global_notes_md = $5 WHERE id = $6",
+         end_date = $4, global_notes_md = $5, report_type = $6::report_type,
+         severity_definitions_md = $7 WHERE id = $8",
     )
     .bind(&payload.name)
     .bind(&payload.status)
     .bind(payload.start_date)
     .bind(payload.end_date)
     .bind(&payload.global_notes_md)
+    .bind(&payload.report_type)
+    .bind(&payload.severity_definitions_md)
     .bind(id)
     .execute(&state.pool)
     .await
