@@ -19,6 +19,10 @@ export interface Finding {
 	references_json: unknown;
 	status: 'open' | 'triaged' | 'accepted_risk' | 'fixed';
 	mitre_technique_ids: string[];
+	remediation_horizon: 'short' | 'medium' | 'long' | null;
+	retested_at: string | null;
+	retested_by_name: string | null;
+	retest_notes_md: string;
 	created_at: string;
 	affected_hosts: AffectedHost[];
 }
@@ -36,6 +40,12 @@ export interface FindingRequest {
 	status?: string;
 	mitre_technique_ids?: string[];
 	affected_host_ids?: string[];
+	remediation_horizon?: string | null;
+}
+
+export interface RetestRequest {
+	status: string;
+	retest_notes_md?: string;
 }
 
 export function listFindings(engagementId: string): Promise<Finding[]> {
@@ -56,4 +66,8 @@ export function updateFinding(id: string, payload: FindingRequest): Promise<Find
 
 export function deleteFinding(id: string): Promise<void> {
 	return apiDelete(`/api/findings/${id}`);
+}
+
+export function retestFinding(id: string, payload: RetestRequest): Promise<Finding> {
+	return apiSend(`/api/findings/${id}/retest`, 'PATCH', payload);
 }

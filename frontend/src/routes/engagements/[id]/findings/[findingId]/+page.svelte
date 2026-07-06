@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { getFinding, updateFinding, deleteFinding } from '$lib/api/findings';
+	import { getFinding, updateFinding, deleteFinding, retestFinding } from '$lib/api/findings';
 	import type { Finding } from '$lib/api/findings';
 	import { listHosts } from '$lib/api/hosts';
 	import type { Host } from '$lib/api/hosts';
@@ -44,6 +44,11 @@
 	let pocDraft = $state('');
 	let mitreIdsDraft = $state('');
 	let affectedHostIds = $state<string[]>([]);
+	let horizonDraft = $state('');
+
+	let retestStatusDraft = $state('fixed');
+	let retestNotesDraft = $state('');
+	let retestBusy = $state(false);
 
 	function mitreName(id: string): string | null {
 		return mitreTechniques.find((t) => t.id === id)?.name ?? null;
@@ -78,6 +83,8 @@
 			pocDraft = f.poc_md;
 			mitreIdsDraft = f.mitre_technique_ids.join(', ');
 			affectedHostIds = f.affected_hosts.map((h) => h.id);
+			horizonDraft = f.remediation_horizon ?? '';
+			retestStatusDraft = f.status === 'fixed' ? 'fixed' : 'triaged';
 		} catch {
 			error = 'Failed to load finding.';
 		} finally {
@@ -104,7 +111,8 @@
 				remediation_md: remediationDraft,
 				poc_md: pocDraft,
 				mitre_technique_ids: mitreIds,
-				affected_host_ids: affectedHostIds
+				affected_host_ids: affectedHostIds,
+				remediation_horizon: horizonDraft || null
 			});
 			history = await getFindingHistory(findingId);
 			error = '';
@@ -128,6 +136,24 @@
 			goto(`/engagements/${engagementId}/findings`);
 		} catch {
 			error = 'Failed to remove finding.';
+		}
+	}
+
+	async function handleRetest(e: SubmitEvent) {
+		e.preventDefault();
+		retestBusy = true;
+		try {
+			finding = await retestFinding(findingId, {
+				status: retestStatusDraft,
+				retest_notes_md: retestNotesDraft
+			});
+			statusDraft = finding.status;
+			history = await getFindingHistory(findingId);
+			error = '';
+		} catch {
+			error = 'Failed to log retest.';
+		} finally {
+			retestBusy = false;
 		}
 	}
 
@@ -206,6 +232,15 @@
 							<option value="fixed">fixed</option>
 						</select>
 					</label>
+					<label>
+						Remediation horizon
+						<select bind:value={horizonDraft}>
+							<option value="">(none)</option>
+							<option value="short">short-term</option>
+							<option value="medium">medium-term</option>
+							<option value="long">long-term</option>
+						</select>
+					</label>
 				</div>
 
 				<button type="button" onclick={() => (showCvssCalc = !showCvssCalc)}>
@@ -261,6 +296,33 @@
 					<button onclick={handleSave}>Save</button>
 					<button onclick={handleDelete}>Delete finding</button>
 				</div>
+
+				<h2>Retest</h2>
+				{#if finding.retested_at}
+					<p class="muted">
+						Last retested {new Date(finding.retested_at).toLocaleString()} by
+						{finding.retested_by_name ?? 'unknown'}.
+						{#if finding.retest_notes_md}<br />{finding.retest_notes_md}{/if}
+					</p>
+				{:else}
+					<p class="muted">Not yet retested.</p>
+				{/if}
+				<form onsubmit={handleRetest} class="retest-form">
+					<label>
+						New status
+						<select bind:value={retestStatusDraft}>
+							<option value="open">open</option>
+							<option value="triaged">triaged</option>
+							<option value="accepted_risk">accepted risk</option>
+							<option value="fixed">fixed</option>
+						</select>
+					</label>
+					<label>
+						Retest notes
+						<textarea bind:value={retestNotesDraft} rows="3"></textarea>
+					</label>
+					<button type="submit" disabled={retestBusy}>{retestBusy ? 'Logging…' : 'Log retest'}</button>
+				</form>
 			</section>
 		{:else if activeTab === 'notes'}
 			<section>
@@ -358,6 +420,12 @@
 	.actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+	.retest-form {
+		max-width: 30rem;
+	}
+	.muted {
+		color: var(--text-muted);
 	}
 	.mitre-list {
 		list-style: none;

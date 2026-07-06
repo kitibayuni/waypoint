@@ -66,6 +66,7 @@
 			<select bind:value={source} onchange={() => { preview = null; result = null; }}>
 				<option value="nmap">Nmap XML</option>
 				<option value="nessus">Nessus (.nessus)</option>
+				<option value="openvas">OpenVAS (XML)</option>
 				<option value="bloodhound">BloodHound (computers.json)</option>
 			</select>
 		</label>

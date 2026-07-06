@@ -9,6 +9,8 @@ export interface Engagement {
 	start_date: string | null;
 	end_date: string | null;
 	global_notes_md: string;
+	report_type: string;
+	severity_definitions_md: string;
 	created_by: string | null;
 	created_at: string;
 }
@@ -28,6 +30,8 @@ export interface UpdateEngagementRequest {
 	start_date: string | null;
 	end_date: string | null;
 	global_notes_md: string;
+	report_type: string;
+	severity_definitions_md: string;
 }
 
 export function listEngagements(): Promise<Engagement[]> {

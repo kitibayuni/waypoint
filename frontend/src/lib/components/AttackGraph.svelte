@@ -163,6 +163,17 @@
 				selector: 'edge[type = "trust"]',
 				style: { 'line-color': '#3b6fa0', 'target-arrow-color': '#3b6fa0' }
 			},
+			// Distinct amber/dashed so a pivot/tunnel path reads differently from
+			// both a trust relationship (solid blue) and simple ownership
+			// (grey has-service) -- it's neither, it's a network-layer hop.
+			{
+				selector: 'edge[type = "pivot"]',
+				style: {
+					'line-color': '#c98a2e',
+					'target-arrow-color': '#c98a2e',
+					'line-style': 'dashed'
+				}
+			},
 			// Ownership, not an attack path -- a quiet, undirected-looking connector
 			// rather than a directional arrow.
 			{

@@ -19,6 +19,8 @@
 		deleteTrustRelationship
 	} from '$lib/api/trust_relationships';
 	import type { TrustRelationship } from '$lib/api/trust_relationships';
+	import { listPivotTunnels, createPivotTunnel, deletePivotTunnel, PIVOT_METHODS } from '$lib/api/pivot_tunnels';
+	import type { PivotTunnel } from '$lib/api/pivot_tunnels';
 	import { listHostChecklists } from '$lib/api/checklists';
 	import type { Checklist } from '$lib/api/checklists';
 	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
@@ -59,6 +61,14 @@
 	let accessKind = $state('session');
 	let accessNote = $state('');
 
+	let allPivots = $state<PivotTunnel[]>([]);
+	let pivotsFromHost = $derived(allPivots.filter((p) => p.from_host_id === hostId));
+	let newPivotToHostId = $state('');
+	let newPivotMethod = $state('ssh_dynamic');
+	let newPivotLocalPort = $state<number | ''>('');
+	let newPivotRemoteTarget = $state('');
+	let newPivotNotes = $state('');
+
 	let newIp = $state('');
 	let newTagName = $state('');
 
@@ -76,14 +86,15 @@
 		loading = true;
 		error = '';
 		try {
-			const [h, svc, cls, hostNotes, hostAttachments, hosts, trust] = await Promise.all([
+			const [h, svc, cls, hostNotes, hostAttachments, hosts, trust, pivots] = await Promise.all([
 				getHost(hostId),
 				listServices(hostId),
 				listHostChecklists(hostId),
 				listNotes(engagementId, 'host', hostId),
 				listAttachments(engagementId, 'host', hostId),
 				listHosts(engagementId),
-				listTrustRelationships(engagementId)
+				listTrustRelationships(engagementId),
+				listPivotTunnels(engagementId)
 			]);
 			host = h;
 			services = svc;
@@ -92,6 +103,7 @@
 			attachments = hostAttachments;
 			allHosts = hosts;
 			allTrust = trust;
+			allPivots = pivots;
 			labelDraft = h.label;
 			hostnameDraft = h.hostname ?? '';
 			osDraft = h.os ?? '';
@@ -159,6 +171,37 @@
 			allTrust = allTrust.filter((t) => t.id !== id);
 		} catch {
 			error = 'Failed to remove access entry.';
+		}
+	}
+
+	async function handleAddPivot(e: SubmitEvent) {
+		e.preventDefault();
+		try {
+			const pivot = await createPivotTunnel(engagementId, {
+				from_host_id: hostId,
+				to_host_id: newPivotToHostId || null,
+				method: newPivotMethod,
+				local_port: newPivotLocalPort === '' ? null : Number(newPivotLocalPort),
+				remote_target: newPivotRemoteTarget || null,
+				notes_md: newPivotNotes
+			});
+			allPivots = [...allPivots, pivot];
+			newPivotToHostId = '';
+			newPivotLocalPort = '';
+			newPivotRemoteTarget = '';
+			newPivotNotes = '';
+			error = '';
+		} catch {
+			error = 'Failed to log pivot tunnel.';
+		}
+	}
+
+	async function handleRemovePivot(id: string) {
+		try {
+			await deletePivotTunnel(id);
+			allPivots = allPivots.filter((p) => p.id !== id);
+		} catch {
+			error = 'Failed to remove pivot tunnel.';
 		}
 	}
 
@@ -384,6 +427,56 @@
 						</select>
 						<input bind:value={accessNote} placeholder="note (optional)" />
 						<button type="submit">Log</button>
+					</form>
+
+					<h2>Pivots &amp; tunnels</h2>
+					{#if pivotsFromHost.length === 0}
+						<p class="muted">No pivots logged from this host yet.</p>
+					{:else}
+						<ul class="access-list">
+							{#each pivotsFromHost as p (p.id)}
+								<li>
+									{p.method}
+									{#if p.to_host_id}
+										&rarr;
+										<a href={`/engagements/${engagementId}/hosts/${p.to_host_id}`}>{p.to_host_label}</a>
+									{:else}
+										&rarr; <span class="muted">{p.remote_target ?? 'network segment'}</span>
+									{/if}
+									{#if p.local_port}
+										<span class="muted">(local port {p.local_port})</span>
+									{/if}
+									{#if p.notes_md}
+										<span class="muted">— {p.notes_md}</span>
+									{/if}
+									<button onclick={() => handleRemovePivot(p.id)}>&times;</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<h3>Log pivot</h3>
+					<form onsubmit={handleAddPivot} class="inline-form">
+						<select bind:value={newPivotMethod}>
+							{#each PIVOT_METHODS as m (m)}
+								<option value={m}>{m}</option>
+							{/each}
+						</select>
+						<select bind:value={newPivotToHostId}>
+							<option value="">(subnet / no specific host)</option>
+							{#each allHosts.filter((h) => h.id !== hostId) as h (h.id)}
+								<option value={h.id}>{h.label}</option>
+							{/each}
+						</select>
+						<input
+							type="number"
+							min="0"
+							max="65535"
+							bind:value={newPivotLocalPort}
+							placeholder="local port"
+						/>
+						<input bind:value={newPivotRemoteTarget} placeholder="remote target (e.g. CIDR)" />
+						<input bind:value={newPivotNotes} placeholder="notes (optional)" />
+						<button type="submit">Log pivot</button>
 					</form>
 
 					<label class="foothold-toggle">

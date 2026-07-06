@@ -11,6 +11,13 @@
 	import { getServiceChecklist } from '$lib/api/checklists';
 	import type { Checklist } from '$lib/api/checklists';
 	import ChecklistPanel from '$lib/components/ChecklistPanel.svelte';
+	import {
+		listServiceTechnologies,
+		createServiceTechnology,
+		deleteServiceTechnology,
+		KNOWN_TECHNOLOGIES
+	} from '$lib/api/service_technologies';
+	import type { ServiceTechnology } from '$lib/api/service_technologies';
 
 	let {
 		selection,
@@ -32,6 +39,7 @@
 	let host = $state<Host | null>(null);
 	let credential = $state<Credential | null>(null);
 	let serviceChecklist = $state<Checklist | null>(null);
+	let technologies = $state<ServiceTechnology[]>([]);
 	let loading = $state(false);
 	let error = $state('');
 	let revealedSecret = $state('');
@@ -50,10 +58,15 @@
 	let trustKindDraft = $state('session');
 	let trustNoteDraft = $state('');
 
+	let newTechName = $state('');
+	let newTechVersion = $state('');
+	let newTechNotes = $state('');
+
 	async function load() {
 		host = null;
 		credential = null;
 		serviceChecklist = null;
+		technologies = [];
 		revealedSecret = '';
 		error = '';
 		if (!selection) return;
@@ -67,6 +80,7 @@
 				// A 404 here just means this service's type has no mapped checklist
 				// template (or none instantiated yet) -- an expected, non-error state.
 				serviceChecklist = await getServiceChecklist(selection.id).catch(() => null);
+				technologies = await listServiceTechnologies(selection.id);
 			} else if (selection.type === 'trust') {
 				// Already fully present in the edge's own data -- no fetch needed.
 				trustKindDraft = (selection.data.kind as string) ?? 'session';
@@ -173,6 +187,35 @@
 			onChanged();
 		} catch {
 			error = 'Failed to add host (check the IP address format).';
+		}
+	}
+
+	async function handleAddTechnology(e: SubmitEvent) {
+		e.preventDefault();
+		if (!selection || !newTechName.trim()) return;
+		try {
+			const tech = await createServiceTechnology(selection.id, {
+				name: newTechName.trim(),
+				version: newTechVersion || null,
+				notes_md: newTechNotes
+			});
+			technologies = [...technologies, tech];
+			newTechName = '';
+			newTechVersion = '';
+			newTechNotes = '';
+			error = '';
+			onChanged();
+		} catch {
+			error = 'Failed to add detected technology.';
+		}
+	}
+
+	async function handleDeleteTechnology(id: string) {
+		try {
+			await deleteServiceTechnology(id);
+			technologies = technologies.filter((t) => t.id !== id);
+		} catch {
+			error = 'Failed to remove detected technology.';
 		}
 	}
 
@@ -343,6 +386,41 @@
 			{:else}
 				<p class="muted">No checklist for this service.</p>
 			{/if}
+
+			<h3>Detected technology</h3>
+			{#if technologies.length === 0}
+				<p class="muted">Nothing detected on this service yet.</p>
+			{:else}
+				<ul class="tech-list">
+					{#each technologies as t (t.id)}
+						<li>
+							{t.name}{t.version ? ` ${t.version}` : ''}
+							{#if t.notes_md}<span class="muted"> — {t.notes_md}</span>{/if}
+							<button type="button" onclick={() => handleDeleteTechnology(t.id)}>&times;</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			<form onsubmit={handleAddTechnology}>
+				<label>
+					Name
+					<input bind:value={newTechName} required list="known-technologies" placeholder="e.g. wordpress" />
+					<datalist id="known-technologies">
+						{#each KNOWN_TECHNOLOGIES as name (name)}
+							<option value={name}></option>
+						{/each}
+					</datalist>
+				</label>
+				<label>
+					Version
+					<input bind:value={newTechVersion} placeholder="optional" />
+				</label>
+				<label>
+					Notes
+					<input bind:value={newTechNotes} placeholder="optional" />
+				</label>
+				<button type="submit">Add</button>
+			</form>
 		{:else if selection.type === 'trust'}
 			<form onsubmit={handleUpdateTrust}>
 				<label>
@@ -468,5 +546,21 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
+	}
+	.tech-list {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.tech-list button {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
 	}
 </style>

@@ -7,6 +7,17 @@
 	import type { ScopeItem } from '$lib/api/scope';
 	import { listMembers, addMember, updateMemberRole, removeMember } from '$lib/api/members';
 	import type { Member } from '$lib/api/members';
+	import {
+		listSnapshots,
+		createSnapshot,
+		markSnapshotFinal,
+		reportViewUrl,
+		reportPdfUrl,
+		snapshotViewUrl,
+		snapshotPdfUrl,
+		REPORT_TYPES
+	} from '$lib/api/reports';
+	import type { ReportSnapshot } from '$lib/api/reports';
 	import Dashboard from '$lib/components/Dashboard.svelte';
 
 	const engagementId = $page.params.id as string;
@@ -14,9 +25,12 @@
 	let engagement = $state<Engagement | null>(null);
 	let scopeItems = $state<ScopeItem[]>([]);
 	let members = $state<Member[]>([]);
+	let snapshots = $state<ReportSnapshot[]>([]);
 	let notesDraft = $state('');
+	let severityDefsDraft = $state('');
 	let loading = $state(true);
 	let error = $state('');
+	let snapshotBusy = $state(false);
 
 	let newScopeKind = $state('ip');
 	let newScopeValue = $state('');
@@ -28,15 +42,18 @@
 		loading = true;
 		error = '';
 		try {
-			const [e, scope, mem] = await Promise.all([
+			const [e, scope, mem, snaps] = await Promise.all([
 				getEngagement(engagementId),
 				listScope(engagementId),
-				listMembers(engagementId)
+				listMembers(engagementId),
+				listSnapshots(engagementId)
 			]);
 			engagement = e;
 			scopeItems = scope;
 			members = mem;
+			snapshots = snaps;
 			notesDraft = e.global_notes_md;
+			severityDefsDraft = e.severity_definitions_md;
 		} catch {
 			error = 'Failed to load engagement.';
 		} finally {
@@ -54,11 +71,54 @@
 				status: engagement.status,
 				start_date: engagement.start_date,
 				end_date: engagement.end_date,
-				global_notes_md: notesDraft
+				global_notes_md: notesDraft,
+				report_type: engagement.report_type,
+				severity_definitions_md: severityDefsDraft
 			});
 			error = '';
 		} catch {
 			error = 'Failed to save notes.';
+		}
+	}
+
+	async function handleReportTypeChange(reportType: string) {
+		if (!engagement) return;
+		try {
+			engagement = await updateEngagement(engagementId, {
+				name: engagement.name,
+				status: engagement.status,
+				start_date: engagement.start_date,
+				end_date: engagement.end_date,
+				global_notes_md: engagement.global_notes_md,
+				report_type: reportType,
+				severity_definitions_md: engagement.severity_definitions_md
+			});
+			error = '';
+		} catch {
+			error = 'Failed to update report type.';
+		}
+	}
+
+	async function handleCreateSnapshot() {
+		snapshotBusy = true;
+		try {
+			const snap = await createSnapshot(engagementId);
+			snapshots = [snap, ...snapshots];
+			error = '';
+		} catch {
+			error = 'Failed to save snapshot.';
+		} finally {
+			snapshotBusy = false;
+		}
+	}
+
+	async function handleMarkFinal(snapshotId: string) {
+		try {
+			const updated = await markSnapshotFinal(engagementId, snapshotId);
+			snapshots = snapshots.map((s) => (s.id === snapshotId ? updated : s));
+			error = '';
+		} catch {
+			error = 'Failed to mark snapshot final (it may already be final).';
 		}
 	}
 
@@ -127,12 +187,6 @@
 				· {engagement.start_date ?? '?'} &rarr; {engagement.end_date ?? '?'}
 			{/if}
 		</p>
-		<p>
-			<a href={`/api/reports/${engagementId}`} target="_blank" rel="noopener">Preview report</a>
-			&middot;
-			<a href={`/api/reports/${engagementId}?format=pdf`} download="report.pdf">Download PDF</a>
-		</p>
-
 		{#if error}
 			<p class="error">{error}</p>
 		{/if}
@@ -143,7 +197,63 @@
 			<section>
 				<h2>Global notes</h2>
 				<textarea bind:value={notesDraft} rows="4"></textarea>
+				<label for="severity-defs">Severity ratings definitions</label>
+				<textarea id="severity-defs" bind:value={severityDefsDraft} rows="4"></textarea>
 				<button onclick={saveNotes}>Save notes</button>
+			</section>
+
+			<section>
+				<h2>Report</h2>
+				<label for="report-type">Report type</label>
+				<select
+					id="report-type"
+					value={engagement.report_type}
+					onchange={(e) => handleReportTypeChange((e.target as HTMLSelectElement).value)}
+				>
+					{#each REPORT_TYPES as rt (rt.value)}
+						<option value={rt.value}>{rt.label}</option>
+					{/each}
+				</select>
+				<p>
+					<a href={reportViewUrl(engagementId)} target="_blank" rel="noopener">Preview report</a>
+					&middot;
+					<a href={reportPdfUrl(engagementId)} download="report.pdf">Download PDF</a>
+				</p>
+				<button onclick={handleCreateSnapshot} disabled={snapshotBusy}>
+					{snapshotBusy ? 'Saving…' : 'Save snapshot'}
+				</button>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr>
+								<th>Generated</th>
+								<th>By</th>
+								<th>Status</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each snapshots as snap (snap.id)}
+								<tr>
+									<td>{new Date(snap.generated_at).toLocaleString()}</td>
+									<td>{snap.generated_by_name ?? ''}</td>
+									<td><span class="badge badge-{snap.status}">{snap.status}</span></td>
+									<td>
+										<a href={snapshotViewUrl(engagementId, snap.id)} target="_blank" rel="noopener"
+											>View</a
+										>
+										&middot;
+										<a href={snapshotPdfUrl(engagementId, snap.id)} download="report.pdf">PDF</a>
+										{#if snap.status === 'draft'}
+											&middot;
+											<button onclick={() => handleMarkFinal(snap.id)}>Mark final</button>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			</section>
 
 			<section>
@@ -285,5 +395,24 @@
 		font-family: inherit;
 		margin-bottom: 0.5rem;
 		box-sizing: border-box;
+	}
+	label {
+		display: block;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin-bottom: 0.2rem;
+	}
+	.badge {
+		display: inline-block;
+		border-radius: 999px;
+		padding: 0.05rem 0.5rem;
+		font-size: 0.75rem;
+	}
+	.badge-draft {
+		background: var(--border);
+	}
+	.badge-final {
+		background: #0ca30c;
+		color: #fff;
 	}
 </style>
